@@ -54,6 +54,7 @@ class Widget(widgets.DOMWidget):
     rescale_on_resize = Bool(True).tag(sync=True)
     node_movement_enabled = Bool(False).tag(sync=True)
 
+    # callbacks
     on_node_click_callback = None
     on_link_click_callback = None
     on_svg_click_callback = None
