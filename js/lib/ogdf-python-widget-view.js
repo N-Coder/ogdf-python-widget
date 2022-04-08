@@ -60,6 +60,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
 
         this.nodes = []
         this.links = []
+        this.clusters = []
 
         this.width = this.model.get('width')
         this.height = this.model.get('height')
@@ -314,6 +315,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
         } else if (msg.code === 'initGraph') {
             this.links = msg.links
             this.nodes = msg.nodes
+            this.clusters = msg.clusters
             this.render()
         } else if (msg.code === 'nodeAdded') {
             this.addNode(msg.data)
@@ -858,7 +860,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             this.el.appendChild(this.svg)
         }
 
-        this.draw_graph(this.nodes, this.links)
+        this.draw_graph(this.nodes, this.links, this.clusters)
 
         var widgetView = this
 
@@ -1125,6 +1127,37 @@ let WidgetView = widgets.DOMWidgetView.extend({
         }
     },
 
+    constructCluster: function (clusterData, cluster_holder, widgetView) {
+        let cluster = cluster_holder
+            .data([clusterData])
+            .enter()
+            .append(function (d) {
+                return document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            })
+            .attr("class", "cluster")
+            .attr("width", function (d) {
+                return d.clusterWidth
+            })
+            .attr("height", function (d) {
+                return d.clusterHeight
+            })
+            .attr("x", function (d) {
+                return d.x
+            })
+            .attr("y", function (d) {
+                return d.y
+            })
+            .attr("fill", function (d) {
+                return "transparent"
+            })
+            .attr("stroke", function (d) {
+                return widgetView.getColorStringFromJson(d.strokeColor)
+            })
+            .attr("stroke-width", function (d) {
+                return d.strokeWidth
+            })
+    },
+
     getColorStringFromJson(color) {
         return "rgba(" + color.r + ", " + color.g + ", " + color.b + ", " + color.a + ")"
     },
@@ -1137,7 +1170,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
         return "M" + x1 + "," + y1 + "A" + drx + "," + dry + " " + xRotation + "," + largeArc + "," + 1 + " " + (x2 + 1) + "," + (y2 + 1);
     },
 
-    draw_graph(nodes_data, links_data) {
+    draw_graph(nodes_data, links_data, cluster_data) {
         let widgetView = this
         const svg = d3.select(this.svg)
 
@@ -1202,6 +1235,14 @@ let WidgetView = widgets.DOMWidgetView.extend({
 
         for (let i = 0; i < nodes_data.length; i++) {
             widgetView.constructNode(nodes_data[i], this.node_holder, this.text_holder, widgetView, false)
+        }
+
+        this.cluster_holder = this.g.append("g")
+            .attr("class", "cluster_holder")
+            .selectAll(".cluster")
+
+        for (let i = 0; i < cluster_data.length; i++) {
+            widgetView.constructCluster(cluster_data[i], this.cluster_holder, widgetView)
         }
 
         function constructArrowElements(radius) {

@@ -249,6 +249,15 @@ class Widget(widgets.DOMWidget):
 
         return link_dict
 
+    def cluster_to_dict(self, cluster):
+        return {"name": str(self.graph_attributes.label(cluster)),
+                "x": int(self.graph_attributes.x(cluster) + 0.5),
+                "y": int(self.graph_attributes.y(cluster) + 0.5),
+                "clusterWidth": self.graph_attributes.width(cluster),
+                "clusterHeight": self.graph_attributes.height(cluster),
+                "strokeColor": color_to_dict(self.graph_attributes.strokeColor(cluster)),
+                "strokeWidth": self.graph_attributes.strokeWidth(cluster)}
+
     def export_graph(self):
         nodes_data = []
         for node in self.graph_attributes.constGraph().nodes:
@@ -258,7 +267,12 @@ class Widget(widgets.DOMWidget):
         for link in self.graph_attributes.constGraph().edges:
             links_data.append(self.link_to_dict(link))
 
-        self.send({'code': 'initGraph', 'nodes': nodes_data, 'links': links_data})
+        cluster_data = []
+        if isinstance(self.graph_attributes, cppyy.gbl.ogdf.ClusterGraphAttributes):
+            for cluster in self.graph_attributes.constClusterGraph().clusters:
+                cluster_data.append(self.cluster_to_dict(cluster))
+
+        self.send({'code': 'initGraph', 'nodes': nodes_data, 'links': links_data, 'clusters': cluster_data})
 
 
 class MyGraphObserver(cppyy.gbl.ogdf.GraphObserver):
