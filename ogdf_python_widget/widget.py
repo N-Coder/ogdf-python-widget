@@ -67,12 +67,16 @@ class Widget(widgets.DOMWidget):
         self.graph_attributes = graph_attributes
         self.on_msg(self.handle_msg)
         self.myObserver = MyGraphObserver(self.graph_attributes.constGraph(), self)
+        # if isinstance(self.graph_attributes, cppyy.gbl.ogdf.ClusterGraphAttributes):
+        #     self.myClusterObserver = MyClusterGraphObserver(self.graph_attributes.constClusterGraph(), self)
         self.debug = debug
 
     def set_graph_attributes(self, graph_attributes):
         self.graph_attributes = graph_attributes
         self.export_graph()
         self.myObserver = MyGraphObserver(self.graph_attributes.constGraph(), self)
+        # if isinstance(self.graph_attributes, cppyy.gbl.ogdf.ClusterGraphAttributes):
+        #     self.myClusterObserver = MyClusterGraphObserver(self.graph_attributes.constClusterGraph(), self)
         self.stop_force_directed()
 
     def update_graph_attributes(self, graph_attributes):
@@ -114,7 +118,7 @@ class Widget(widgets.DOMWidget):
         elif msg['code'] == 'widgetReady':
             self.export_graph()
         elif msg['code'] == 'positionUpdate':
-            self.position_update(msg['nodes'])
+            self.position_update(msg['nodes'].values())
         if self.debug and msg['code'] != 'positionUpdate':
             print(msg)
 
@@ -210,16 +214,21 @@ class Widget(widgets.DOMWidget):
         return {'x': g_x, 'y': g_y}
 
     def node_to_dict(self, node):
-        return {"id": str(node.index()),
-                "name": str(self.graph_attributes.label(node)),
-                "x": int(self.graph_attributes.x(node) + 0.5),
-                "y": int(self.graph_attributes.y(node) + 0.5),
-                "shape": self.graph_attributes.shape(node),
-                "fillColor": color_to_dict(self.graph_attributes.fillColor(node)),
-                "strokeColor": color_to_dict(self.graph_attributes.strokeColor(node)),
-                "strokeWidth": self.graph_attributes.strokeWidth(node),
-                "nodeWidth": self.graph_attributes.width(node),
-                "nodeHeight": self.graph_attributes.height(node)}
+        node_data = {"id": str(node.index()),
+                     "name": str(self.graph_attributes.label(node)),
+                     "x": int(self.graph_attributes.x(node) + 0.5),
+                     "y": int(self.graph_attributes.y(node) + 0.5),
+                     "shape": self.graph_attributes.shape(node),
+                     "fillColor": color_to_dict(self.graph_attributes.fillColor(node)),
+                     "strokeColor": color_to_dict(self.graph_attributes.strokeColor(node)),
+                     "strokeWidth": self.graph_attributes.strokeWidth(node),
+                     "nodeWidth": self.graph_attributes.width(node),
+                     "nodeHeight": self.graph_attributes.height(node)}
+
+        if isinstance(self.graph_attributes, cppyy.gbl.ogdf.ClusterGraphAttributes):
+            node_data["clusterId"] = str(self.graph_attributes.constClusterGraph().clusterOf(node).index())
+
+        return node_data
 
     def link_to_dict(self, link):
         bends = []
@@ -250,29 +259,52 @@ class Widget(widgets.DOMWidget):
         return link_dict
 
     def cluster_to_dict(self, cluster):
-        return {"name": str(self.graph_attributes.label(cluster)),
+        nodes = []
+        for node in cluster.nodes:
+            nodes.append(str(node.index()))
+
+        children_data = []
+        for cluster_child in cluster.children:
+            children_data.append(str(cluster_child.index()))
+
+        parent_id = None
+        if cluster.index() is not self.graph_attributes.constClusterGraph().rootCluster().index():
+            parent_id = str(cluster.parent().index())
+
+        return {"id": str(cluster.index()),
+                "parentId": parent_id,
+                "name": str(self.graph_attributes.label(cluster)),
                 "x": int(self.graph_attributes.x(cluster) + 0.5),
                 "y": int(self.graph_attributes.y(cluster) + 0.5),
                 "clusterWidth": self.graph_attributes.width(cluster),
                 "clusterHeight": self.graph_attributes.height(cluster),
                 "strokeColor": color_to_dict(self.graph_attributes.strokeColor(cluster)),
-                "strokeWidth": self.graph_attributes.strokeWidth(cluster)}
+                "strokeWidth": self.graph_attributes.strokeWidth(cluster),
+                "children": children_data,
+                "nodes": nodes}
 
     def export_graph(self):
-        nodes_data = []
+        nodes_data = {}
         for node in self.graph_attributes.constGraph().nodes:
-            nodes_data.append(self.node_to_dict(node))
+            node_data = self.node_to_dict(node)
+            nodes_data[node_data["id"]] = node_data
 
         links_data = []
         for link in self.graph_attributes.constGraph().edges:
             links_data.append(self.link_to_dict(link))
 
-        cluster_data = []
+        cluster_data = {}
+        root_cluster_id = None
         if isinstance(self.graph_attributes, cppyy.gbl.ogdf.ClusterGraphAttributes):
-            for cluster in self.graph_attributes.constClusterGraph().clusters:
-                cluster_data.append(self.cluster_to_dict(cluster))
+            root_cluster_id = str(self.graph_attributes.constClusterGraph().rootCluster().index())
 
-        self.send({'code': 'initGraph', 'nodes': nodes_data, 'links': links_data, 'clusters': cluster_data})
+            for cluster in self.graph_attributes.constClusterGraph().clusters:
+                cluster_dict = self.cluster_to_dict(cluster)
+                print(cluster_dict)
+                cluster_data[cluster_dict["id"]] = cluster_dict
+
+        self.send({'code': 'initGraph', 'nodes': nodes_data, 'links': links_data, 'clusters': cluster_data,
+                   'rootClusterId': root_cluster_id})
 
 
 class MyGraphObserver(cppyy.gbl.ogdf.GraphObserver):
@@ -297,3 +329,15 @@ class MyGraphObserver(cppyy.gbl.ogdf.GraphObserver):
 
     def cleared(self):
         self.widget.send({'code': 'clearGraph'})
+
+
+# class MyClusterGraphObserver(cppyy.gbl.ogdf.ClusterGraphObserver):
+#     def __init__(self, graph, widget):
+#         super().__init__(graph)
+#         self.widget = widget
+#
+#     def clusterDeleted(self, cluster):
+#         self.widget.send({'clusterdeltest': cluster.index()})
+#
+#     def clusterAdded(self, cluster):
+#         self.widget.send({'clusterdeltest': 'test'})
