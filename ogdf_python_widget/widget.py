@@ -67,9 +67,11 @@ class Widget(widgets.DOMWidget):
         super().__init__()
         self.graph_attributes = graph_attributes
         self.on_msg(self.handle_msg)
-        self.myObserver = MyGraphObserver(self.graph_attributes.constGraph(), self)
-        # if isinstance(self.graph_attributes, cppyy.gbl.ogdf.ClusterGraphAttributes):
-        #     self.myClusterObserver = MyClusterGraphObserver(self.graph_attributes.constClusterGraph(), self)
+        if isinstance(self.graph_attributes, cppyy.gbl.ogdf.ClusterGraphAttributes):
+            self.myClusterObserver = MyClusterGraphObserver(self.graph_attributes.constClusterGraph(), self)
+
+        # self.myObserver = MyGraphObserver(self.graph_attributes.constGraph(), self)
+
         self.debug = debug
 
     def set_graph_attributes(self, graph_attributes):
@@ -344,13 +346,14 @@ class MyGraphObserver(cppyy.gbl.ogdf.GraphObserver):
     def cleared(self):
         self.widget.send({'code': 'clearGraph'})
 
-# class MyClusterGraphObserver(cppyy.gbl.ogdf.ClusterGraphObserver):
-#     def __init__(self, graph, widget):
-#         super().__init__(graph)
-#         self.widget = widget
-#
-#     def clusterDeleted(self, cluster):
-#         self.widget.send({'clusterdeltest': cluster.index()})
-#
-#     def clusterAdded(self, cluster):
-#         self.widget.send({'clusterdeltest': 'test'})
+
+class MyClusterGraphObserver(cppyy.gbl.ogdf.ClusterGraphObserver):
+    def __init__(self, graph, widget):
+        super().__init__(graph)
+        self.widget = widget
+
+    def clusterDeleted(self, cluster):
+        self.widget.send({'clusterdeltest': cluster.index()})
+
+    def clusterAdded(self, cluster):
+        self.widget.send({'clusterdeltest': 'test'})
