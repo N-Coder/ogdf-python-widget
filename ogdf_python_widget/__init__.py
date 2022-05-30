@@ -25,6 +25,7 @@ cppyy.include("ogdf/basic/internal/config_autogen.h")
 cppyy.include("ogdf/basic/internal/config.h")
 cppyy.include("ogdf/basic/Graph.h")
 cppyy.include("ogdf/fileformats/GraphIO.h")
+cppyy.include("ogdf/cluster/ClusterGraphObserver.h")
 
 cppyy.load_library("libOGDF.so")
 

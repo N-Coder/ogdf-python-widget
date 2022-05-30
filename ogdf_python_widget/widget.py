@@ -70,7 +70,7 @@ class Widget(widgets.DOMWidget):
         if isinstance(self.graph_attributes, cppyy.gbl.ogdf.ClusterGraphAttributes):
             self.myClusterObserver = MyClusterGraphObserver(self.graph_attributes.constClusterGraph(), self)
 
-        # self.myObserver = MyGraphObserver(self.graph_attributes.constGraph(), self)
+        self.myObserver = MyGraphObserver(self.graph_attributes.constGraph(), self)
 
         self.debug = debug
 
@@ -78,8 +78,8 @@ class Widget(widgets.DOMWidget):
         self.graph_attributes = graph_attributes
         self.export_graph()
         self.myObserver = MyGraphObserver(self.graph_attributes.constGraph(), self)
-        # if isinstance(self.graph_attributes, cppyy.gbl.ogdf.ClusterGraphAttributes):
-        #     self.myClusterObserver = MyClusterGraphObserver(self.graph_attributes.constClusterGraph(), self)
+        if isinstance(self.graph_attributes, cppyy.gbl.ogdf.ClusterGraphAttributes):
+            self.myClusterObserver = MyClusterGraphObserver(self.graph_attributes.constClusterGraph(), self)
         self.stop_force_directed()
 
     def update_graph_attributes(self, graph_attributes):
@@ -353,7 +353,7 @@ class MyClusterGraphObserver(cppyy.gbl.ogdf.ClusterGraphObserver):
         self.widget = widget
 
     def clusterDeleted(self, cluster):
-        self.widget.send({'clusterdeltest': cluster.index()})
+        self.widget.send({'code': 'deleteClusterById', 'data': str(cluster.index())})
 
     def clusterAdded(self, cluster):
-        self.widget.send({'clusterdeltest': 'test'})
+        self.widget.send({'addClusterById': 'test', 'data': self.widget.cluster_to_dict(cluster)})
