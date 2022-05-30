@@ -221,7 +221,6 @@ let WidgetView = widgets.DOMWidgetView.extend({
     },
 
     syncBackend: function () {
-        //todo update in frontend
         this.send({'code': 'positionUpdate', 'nodes': this.nodes})
     },
 
@@ -261,7 +260,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
         let boundingBoxWidth = boundingBox.maxX - boundingBox.minX + radius * 2
         let boundingBoxHeight = boundingBox.maxY - boundingBox.minY + radius * 2
 
-        if (this.rootClusterId !== null) {
+        if (this.isClusterGraph) {
             let rootCluster = this.clusters[this.rootClusterId]
             boundingBoxWidth = Math.max(boundingBoxWidth, rootCluster.x2 - rootCluster.x)
             boundingBoxHeight = Math.max(boundingBoxHeight, rootCluster.y2 - rootCluster.y)
@@ -326,7 +325,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             this.nodes = msg.nodes
             this.clusters = msg.clusters
             this.rootClusterId = msg.rootClusterId
-            console.log(this.clusters)
+            this.isClusterGraph = this.rootClusterId !== '-1'
             this.render()
         } else if (msg.code === 'nodeAdded') {
             this.addNode(msg.data)
@@ -352,10 +351,14 @@ let WidgetView = widgets.DOMWidgetView.extend({
             this.removeAllBendMovers()
         } else if (msg.code === 'removeBendMoversFor') {
             this.removeBendMoversForLink(msg.data)
+        } else if (msg.code === 'moveCluster') {
+            this.moveCluster(msg.data)
+        } else if (msg.code === 'removeAllClusterMovers') {
+            this.removeAllClusterMovers()
         } else if (msg.code === 'downloadSvg') {
             this.downloadSvg(msg.fileName)
         } else if (msg.code === 'test') {
-            this.rescaleAllText()
+            this.moveCluster('2')
         } else {
             console.log("msg cannot be read: " + msg)
         }
@@ -363,10 +366,10 @@ let WidgetView = widgets.DOMWidgetView.extend({
 
     downloadSvg: function (fileName) {
         let svgData = this.svg.outerHTML;
-        if (!svgData.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)) {
+        if (!svgData.match(/^<svg[^>]+xmlns="http:\/\/www\.w3\.org\/2000\/svg"/)) {
             svgData = svgData.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
         }
-        if (!svgData.match(/^<svg[^>]+"http\:\/\/www\.w3\.org\/1999\/xlink"/)) {
+        if (!svgData.match(/^<svg[^>]+"http:\/\/www\.w3\.org\/1999\/xlink"/)) {
             svgData = svgData.replace(/^<svg/, '<svg xmlns:xlink="http://www.w3.org/1999/xlink"');
         }
         const svgBlob = new Blob([svgData], {type: "image/svg+xml;charset=utf-8"});
@@ -375,6 +378,113 @@ let WidgetView = widgets.DOMWidgetView.extend({
         downloadLink.href = svgUrl;
         downloadLink.download = fileName + ".svg";
         downloadLink.click();
+    },
+
+    moveCluster: function (clusterId) {
+        let widgetView = this
+        let d = this.clusters[clusterId];
+
+        let clusterData = [{
+            "id": d.id,
+            "x": (d.x + d.x2) / 2,
+            "y": (d.y + d.y2) / 2,
+            "strokeWidth": 1
+        }]
+
+        let clusterMover = this.clusterMover_holder
+            .data(clusterData)
+            .enter()
+            .append("circle")
+            .attr("class", "clusterMover")
+            .attr("cx", function (d) {
+                return d.x
+            })
+            .attr("cy", function (d) {
+                return d.y
+            })
+            .attr("id", function (d) {
+                return d.id
+            })
+            .attr("r", 15)
+            .attr("fill", "yellow")
+            .attr("stroke", "black")
+            .attr("stroke-width", function (d) {
+                return d.strokeWidth
+            })
+
+        const drag_handler_cluster = d3.drag()
+            .on("start", dragStarted_cluster)
+            .on("drag", dragged_cluster)
+            .on("end", dragEnded_cluster);
+
+        clusterMover.call(drag_handler_cluster)
+
+        function dragStarted_cluster(event, d) {
+            d3.select(widgetView.svg)
+                .selectAll(".clusterMover")
+                .filter(function (data) {
+                    return data.id === d.id;
+                })
+                .attr("stroke-width", function (data) {
+                    return data.strokeWidth + 1
+                });
+
+            d.lastX = event.x
+            d.lastY = event.y
+        }
+
+        function dragged_cluster(event, d) {
+            const clusterId = d.id
+            const cluster = widgetView.clusters[clusterId]
+
+            //moving the circle that is dragged
+            d3.select(widgetView.svg)
+                .selectAll(".clusterMover")
+                .filter(function (data) {
+                    return data.id === clusterId;
+                })
+                .attr("cx", event.x)
+                .attr("cy", event.y);
+
+            //moving the bounding box of the dragged cluster
+            cluster.nodesBoundingBox.minX = cluster.nodesBoundingBox.minX - (d.lastX - event.x)
+            cluster.nodesBoundingBox.maxX = cluster.nodesBoundingBox.maxX - (d.lastX - event.x)
+            cluster.nodesBoundingBox.minY = cluster.nodesBoundingBox.minY - (d.lastY - event.y)
+            cluster.nodesBoundingBox.maxY = cluster.nodesBoundingBox.maxY - (d.lastY - event.y)
+
+            //update all cluster positions
+            widgetView.constructClusters(widgetView.rootClusterId, false)
+
+            //drag nodes and links
+            for (let i = 0; i < cluster.nodes.length; i++) {
+                let node = widgetView.nodes[cluster.nodes[i]];
+                widgetView.moveNodeAndLinks(node.id, node.x - (d.lastX - event.x), node.y - (d.lastY - event.y), node)
+            }
+
+            //update change
+            d.lastX = event.x
+            d.lastY = event.y
+        }
+
+        function dragEnded_cluster(event, d) {
+            const cluster = widgetView.clusters[d.id]
+
+            d3.select(widgetView.svg)
+                .selectAll(".clusterMover")
+                .attr("stroke-width", function (data) {
+                    return data.strokeWidth
+                });
+
+            //save movers position
+            d.x = event.x
+            d.y = event.y
+
+            //update OGDF when cluster and nodes got moved.
+            for (let i = 0; i < cluster.nodes.length; i++) {
+                let node = widgetView.nodes[cluster.nodes[i]];
+                widgetView.send({"code": "nodeMoved", "id": node.id, "x": node.x, "y": node.y});
+            }
+        }
     },
 
     moveLinkBends: function (d) {
@@ -481,7 +591,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 d.y = Math.round(event.y)
                 widgetView.send({"code": "bendMoved", "linkId": this.id, "bendIndex": d.bendIndex, "x": d.x, "y": d.y});
             } else {
-                //ctrl key not possible because it doesnt activate the drag
+                //ctrl key not possible because it doesn't activate the drag
                 widgetView.send({
                     "code": "bendClicked",
                     "linkId": this.id,
@@ -496,6 +606,14 @@ let WidgetView = widgets.DOMWidgetView.extend({
         if (this.forceDirected) this.stopForceLayout()
         this.nodes[node.id] = node
         this.constructNode(node, this.node_holder, this.text_holder, this, false)
+
+        if (this.isClusterGraph) {
+            const cluster = this.clusters[node.clusterId]
+            cluster.nodes.push(node.id)
+            this.recalculateClusterBoundingBox(cluster)
+            this.constructClusters(this.rootClusterId, false)
+        }
+
         this.forceConfigChanged()
     },
 
@@ -510,23 +628,28 @@ let WidgetView = widgets.DOMWidgetView.extend({
         this.clusters[cluster.id] = cluster
         //add to parent children
         this.clusters[cluster.parentId].children.push(cluster.id)
-        //delete nodes from other clusters and then recalc them
+
+        //reassign nodes from other clusters to new cluster
         for (let i = 0; i < cluster.nodes.length; i++) {
             let nodeId = cluster.nodes[i]
             let oldCluster = this.clusters[this.nodes[nodeId].clusterId]
             oldCluster.nodes.splice(oldCluster.nodes.indexOf(nodeId), 1)
             this.nodes[nodeId].clusterId = cluster.id
         }
-        //todo either rerender everything or try to find an efficient way of reassigning nodes and recalculating bounding boxes
+
         this.constructClusters(this.rootClusterId)
-
-        //todo update remaining clusters
-
-        this.constructCluster(cluster, this.cluster_holder, this)
     },
 
     deleteNodeById: function (nodeId) {
         if (this.forceDirected) this.stopForceLayout()
+
+        if (this.isClusterGraph) {
+            const cluster = this.clusters[this.nodes[nodeId].clusterId]
+            cluster.nodes.splice(cluster.nodes.indexOf(nodeId), 1)
+            this.recalculateClusterBoundingBox(cluster)
+            this.constructClusters(this.rootClusterId, false)
+        }
+
         delete this.nodes[nodeId];
 
         d3.select(this.svg)
@@ -551,6 +674,8 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 this.links.splice(i, 1);
             }
         }
+
+        this.removeBendMoversForLink(linkId)
 
         d3.select(this.svg)
             .selectAll(".line")
@@ -688,6 +813,13 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 d.strokeWidth = node.strokeWidth
                 return d.strokeWidth
             })
+
+        if (this.isClusterGraph) {
+            const cluster = this.clusters[node.clusterId]
+            //todo method that takes cluster and node to recalc
+            this.recalculateClusterBoundingBox(cluster)
+            this.constructClusters(this.rootClusterId, false)
+        }
 
         if (widgetView.forceDirected) {
             setTimeout(function () {
@@ -874,6 +1006,11 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 return d.id === clusterData.id;
             })
 
+        if (c == null) {
+            console.error("ClusterId: " + clusterData.id + " could not be found.")
+            return
+        }
+
         const line = d3.line()
 
         c.transition()
@@ -937,6 +1074,86 @@ let WidgetView = widgets.DOMWidgetView.extend({
         d3.select(this.svg).selectAll(".bendMover").remove()
     },
 
+    removeAllClusterMovers: function () {
+        d3.select(this.svg).selectAll(".clusterMover").remove()
+    },
+
+    moveNodeAndLinks: function (nodeId, newX, newY, d) {
+        let widgetView = this
+        const line = d3.line()
+
+        //move node
+        d3.select(widgetView.svg)
+            .selectAll(".node")
+            .filter(function (data) {
+                return data.id === nodeId;
+            })
+            .attr("cx", function (d) {
+                d.x = newX
+                return newX
+            })
+            .attr("cy", function (d) {
+                d.y = newY
+                return newY
+            })
+            .attr("x", newX - d.nodeWidth / 2)
+            .attr("y", newY - d.nodeHeight / 2);
+
+        //move node-label
+        d3.select(widgetView.svg)
+            .selectAll(".nodeLabel")
+            .filter(function (data) {
+                return data.id === nodeId;
+            })
+            .attr("transform", function () { //<-- use transform it's not a g
+                return "translate(" + newX + "," + newY + ")";
+            });
+
+        let labelsToMoveIds = []
+        //move attached links
+        d3.select(widgetView.svg)
+            .selectAll(".line")
+            .filter(function (data) {
+                return data.source === nodeId || data.target === nodeId;
+            })
+            .attr("d", function (d) {
+                if (d.source === nodeId) {
+                    d.sx = newX
+                    d.sy = newY
+                }
+                if (d.target === nodeId) {
+                    d.tx = newX
+                    d.ty = newY
+                }
+
+                if (d.bends.length === 0) {
+                    labelsToMoveIds.push(d.id)
+                }
+
+                //self loop
+                if (d.source === d.target && d.bends.length === 0) {
+                    return widgetView.getPath(d.sx, d.sy, d.tx, d.ty);
+                }
+
+                let points = [[d.sx, d.sy]].concat(d.bends).concat([[d.tx, d.ty]])
+                return line(points)
+            })
+
+        //move link-label
+        for (let i = 0; i < labelsToMoveIds.length; i++) {
+            d3.select(widgetView.svg)
+                .selectAll(".linkLabel")
+                .filter(function (data) {
+                    return data.id === labelsToMoveIds[i];
+                })
+                .attr("transform", function (data) { //<-- use transform it's not a g
+                    let labelX = (data.sx + data.tx) / 2
+                    let labelY = (data.sy + data.ty) / 2
+                    return "translate(" + labelX + "," + labelY + ")";
+                });
+        }
+    },
+
     removeBendMoversForLink: function (linkId) {
         d3.select(this.svg)
             .selectAll(".bendMover")
@@ -964,7 +1181,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
 
         this.draw_graph(this.links)
 
-        var widgetView = this
+        let widgetView = this;
 
         setTimeout(function () {
             widgetView.rescaleAllText()
@@ -1235,12 +1452,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             this.constructClusters(cluster.children[i], calcNodeBoundingBox)
         }
 
-        let nodes = []
-        for (let i = 0; i < cluster.nodes.length; i++) {
-            nodes.push(this.nodes[cluster.nodes[i]])
-        }
-
-        if (calcNodeBoundingBox) cluster.nodesBoundingBox = this.getBoundingBox(nodes)
+        if (calcNodeBoundingBox) this.recalculateClusterBoundingBox(cluster)
         this.calculateClusterSize(cluster)
 
         let alreadyExists = !d3.select(this.svg)
@@ -1253,6 +1465,15 @@ let WidgetView = widgets.DOMWidgetView.extend({
             this.updateCluster(cluster, false)
         else
             this.constructCluster(cluster, this.cluster_holder, this)
+    },
+
+    recalculateClusterBoundingBox: function (cluster) {
+        let nodes = []
+        for (let i = 0; i < cluster.nodes.length; i++) {
+            nodes.push(this.nodes[cluster.nodes[i]])
+        }
+
+        cluster.nodesBoundingBox = this.getBoundingBox(nodes)
     },
 
     calculateClusterSize: function (cluster) {
@@ -1282,7 +1503,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
     constructCluster: function (clusterData, cluster_holder, widgetView) {
         const line = d3.line()
 
-        let cluster = cluster_holder
+        cluster_holder
             .data([clusterData])
             .enter()
             .append("path")
@@ -1301,6 +1522,15 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 return d.strokeWidth
             })
             .attr("fill", "none")
+            .on("click", function (event, d) {
+                widgetView.send({
+                    "code": "clusterClicked",
+                    "id": d.id,
+                    "altKey": event.altKey,
+                    "ctrlKey": event.ctrlKey
+                });
+
+            })
     },
 
     getColorStringFromJson(color) {
@@ -1352,9 +1582,8 @@ let WidgetView = widgets.DOMWidgetView.extend({
             .attr("class", "cluster_holder")
             .selectAll(".cluster")
 
-        if (this.clusters != null)
+        if (this.clusters != null && this.isClusterGraph)
             this.constructClusters(this.rootClusterId)
-
 
         //links
         this.line_holder = this.g.append("g")
@@ -1392,6 +1621,8 @@ let WidgetView = widgets.DOMWidgetView.extend({
         for (let i = 0; i < nodesData.length; i++) {
             widgetView.constructNode(nodesData[i], this.node_holder, this.text_holder, widgetView, false)
         }
+
+        this.clusterMover_holder = this.g.append("g").attr("class", "clusterMover_holder").selectAll("clusterMover")
 
         function constructArrowElements(radius) {
             //construct arrow for circle
@@ -1446,16 +1677,18 @@ let WidgetView = widgets.DOMWidgetView.extend({
 
             if (widgetView.forceDirected && !event.active) widgetView.simulation.alphaTarget(0.3).restart();
 
-            //calculate nodeBoundingBox without dragged node
-            let cluster = widgetView.clusters[d.clusterId]
-            let nodes = []
-            for (let i = 0; i < cluster.nodes.length; i++) {
-                if (cluster.nodes[i] !== nodeId)
-                    nodes.push(widgetView.nodes[cluster.nodes[i]])
-            }
+            if (widgetView.isClusterGraph) {
+                //calculate nodeBoundingBox without dragged node
+                let cluster = widgetView.clusters[d.clusterId]
+                let nodes = []
+                for (let i = 0; i < cluster.nodes.length; i++) {
+                    if (cluster.nodes[i] !== nodeId)
+                        nodes.push(widgetView.nodes[cluster.nodes[i]])
+                }
 
-            //todo test if BB causes problems when nodes is empty
-            cluster.bbWoutDragged = widgetView.getBoundingBox(nodes)
+                //todo test if BB causes problems when nodes is empty
+                cluster.bbWoutDragged = widgetView.getBoundingBox(nodes)
+            }
         }
 
         function dragged_nodes(event, d) {
@@ -1478,93 +1711,32 @@ let WidgetView = widgets.DOMWidgetView.extend({
             const nodeId = this.id
             const line = d3.line()
 
-            //move node
-            d3.select(widgetView.svg)
-                .selectAll(".node")
-                .filter(function (data) {
-                    return data.id === nodeId;
-                })
-                .attr("cx", newX)
-                .attr("cy", newY)
-                .attr("x", newX - d.nodeWidth / 2)
-                .attr("y", newY - d.nodeHeight / 2);
-
-            //move node-label
-            d3.select(widgetView.svg)
-                .selectAll(".nodeLabel")
-                .filter(function (data) {
-                    return data.id === nodeId;
-                })
-                .attr("transform", function () { //<-- use transform it's not a g
-                    return "translate(" + newX + "," + newY + ")";
-                });
-
-            let labelsToMoveIds = []
-            //move attached links
-            d3.select(widgetView.svg)
-                .selectAll(".line")
-                .filter(function (data) {
-                    return data.source === nodeId || data.target === nodeId;
-                })
-                .attr("d", function (d) {
-                    if (d.source === nodeId) {
-                        d.sx = newX
-                        d.sy = newY
-                    }
-                    if (d.target === nodeId) {
-                        d.tx = newX
-                        d.ty = newY
-                    }
-
-                    if (d.bends.length === 0) {
-                        labelsToMoveIds.push(d.id)
-                    }
-
-                    //selfloop
-                    if (d.source === d.target && d.bends.length === 0) {
-                        return widgetView.getPath(d.sx, d.sy, d.tx, d.ty);
-                    }
-
-                    let points = [[d.sx, d.sy]].concat(d.bends).concat([[d.tx, d.ty]])
-                    return line(points)
-                })
-
-            //move link-label
-            for (let i = 0; i < labelsToMoveIds.length; i++) {
-                d3.select(widgetView.svg)
-                    .selectAll(".linkLabel")
-                    .filter(function (data) {
-                        return data.id === labelsToMoveIds[i];
-                    })
-                    .attr("transform", function (data) { //<-- use transform it's not a g
-                        let labelX = (data.sx + data.tx) / 2
-                        let labelY = (data.sy + data.ty) / 2
-                        return "translate(" + labelX + "," + labelY + ")";
-                    });
-            }
+            widgetView.moveNodeAndLinks(nodeId, newX, newY, d)
 
             //move clusters
-            let cluster = widgetView.clusters[d.clusterId]
-            cluster.nodesBoundingBox.minX = Math.min(cluster.bbWoutDragged.minX, event.x)
-            cluster.nodesBoundingBox.minY = Math.min(cluster.bbWoutDragged.minY, event.y)
-            cluster.nodesBoundingBox.maxX = Math.max(cluster.bbWoutDragged.maxX, event.x)
-            cluster.nodesBoundingBox.maxY = Math.max(cluster.bbWoutDragged.maxY, event.y)
+            if (widgetView.isClusterGraph) {
+                let cluster = widgetView.clusters[d.clusterId]
+                cluster.nodesBoundingBox.minX = Math.min(cluster.bbWoutDragged.minX, event.x)
+                cluster.nodesBoundingBox.minY = Math.min(cluster.bbWoutDragged.minY, event.y)
+                cluster.nodesBoundingBox.maxX = Math.max(cluster.bbWoutDragged.maxX, event.x)
+                cluster.nodesBoundingBox.maxY = Math.max(cluster.bbWoutDragged.maxY, event.y)
 
-            for (let c = cluster; c !== null; c = widgetView.clusters[c.parentId]) {
-                widgetView.calculateClusterSize(c)
+                for (let c = cluster; c !== null; c = widgetView.clusters[c.parentId]) {
+                    widgetView.calculateClusterSize(c)
 
-                d3.select(widgetView.svg)
-                    .selectAll(".cluster")
-                    .filter(function (data) {
-                        return data.id === c.id
-                    })
-                    .attr("d", function (d) {
-                        let points = [[d.x, d.y], [d.x2, d.y], [d.x2, d.y2], [d.x, d.y2], [d.x, d.y]]
-                        return line(points)
-                    })
+                    d3.select(widgetView.svg)
+                        .selectAll(".cluster")
+                        .filter(function (data) {
+                            return data.id === c.id
+                        })
+                        .attr("d", function (d) {
+                            let points = [[d.x, d.y], [d.x2, d.y], [d.x2, d.y2], [d.x, d.y2], [d.x, d.y]]
+                            return line(points)
+                        })
 
-                if (c.parentId === null)
-                    break;
+                    if (c.parentId === null)
+                        break;
+                }
             }
         }
 
@@ -1607,8 +1779,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 widgetView.send({"code": "nodeMoved", "id": this.id, "x": d.x, "y": d.y});
             }
 
-            let cluster = widgetView.clusters[d.clusterId]
-            delete cluster.bbWoutDragged
+            if (widgetView.isClusterGraph) delete widgetView.clusters[d.clusterId].bbWoutDragged
         }
     },
 

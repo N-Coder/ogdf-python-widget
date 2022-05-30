@@ -61,6 +61,7 @@ class Widget(widgets.DOMWidget):
     on_node_moved_callback = None
     on_bend_moved_callback = None
     on_bend_clicked_callback = None
+    on_cluster_click_callback = None
 
     def __init__(self, graph_attributes, debug=False):
         super().__init__()
@@ -115,6 +116,9 @@ class Widget(widgets.DOMWidget):
         elif msg['code'] == 'svgClicked':
             if self.on_svg_click_callback is not None:
                 self.on_svg_click_callback(msg['x'], msg['y'], msg['altKey'], msg['ctrlKey'], msg['backgroundClicked'])
+        elif msg['code'] == 'clusterClicked':
+            if self.on_cluster_click_callback is not None:
+                self.on_cluster_click_callback(self.get_cluster_from_id(msg['id']), msg['altKey'], msg['ctrlKey'])
         elif msg['code'] == 'widgetReady':
             self.export_graph()
         elif msg['code'] == 'positionUpdate':
@@ -159,6 +163,11 @@ class Widget(widgets.DOMWidget):
             if link.index() == int(link_id):
                 return link
 
+    def get_cluster_from_id(self, cluster_id):
+        for cluster in self.graph_attributes.constClusterGraph().clusters:
+            if cluster.index() == int(cluster_id):
+                return cluster
+
     def move_node_to(self, node, x, y):
         self.graph_attributes.x[node] = x
         self.graph_attributes.y[node] = y
@@ -186,6 +195,12 @@ class Widget(widgets.DOMWidget):
 
     def remove_bend_mover_for_id(self, link_id):
         self.send({"code": "removeBendMoversFor", "data": str(link_id)})
+
+    def move_cluster(self, cluster_id):
+        self.send({"code": "moveCluster", "data": cluster_id})
+
+    def remove_all_cluster_movers(self):
+        self.send({"code": "removeAllClusterMovers"})
 
     def update_node(self, node, animated=True):
         self.send({"code": "updateNode", "data": self.node_to_dict(node), "animated": animated})
@@ -294,13 +309,12 @@ class Widget(widgets.DOMWidget):
             links_data.append(self.link_to_dict(link))
 
         cluster_data = {}
-        root_cluster_id = None
+        root_cluster_id = '-1'
         if isinstance(self.graph_attributes, cppyy.gbl.ogdf.ClusterGraphAttributes):
             root_cluster_id = str(self.graph_attributes.constClusterGraph().rootCluster().index())
 
             for cluster in self.graph_attributes.constClusterGraph().clusters:
                 cluster_dict = self.cluster_to_dict(cluster)
-                print(cluster_dict)
                 cluster_data[cluster_dict["id"]] = cluster_dict
 
         self.send({'code': 'initGraph', 'nodes': nodes_data, 'links': links_data, 'clusters': cluster_data,
@@ -329,7 +343,6 @@ class MyGraphObserver(cppyy.gbl.ogdf.GraphObserver):
 
     def cleared(self):
         self.widget.send({'code': 'clearGraph'})
-
 
 # class MyClusterGraphObserver(cppyy.gbl.ogdf.ClusterGraphObserver):
 #     def __init__(self, graph, widget):
