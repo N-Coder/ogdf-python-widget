@@ -163,24 +163,9 @@ let WidgetView = widgets.DOMWidgetView.extend({
 
             d3.select(widgetView.svg)
                 .selectAll(".line")
-                .attr("x1", function (d) {
-                    return d.source.x;
-                })
-                .attr("y1", function (d) {
-                    return d.source.y;
-                })
-                .attr("x2", function (d) {
-                    return d.target.x;
-                })
-                .attr("y2", function (d) {
-                    return d.target.y;
-                })
                 .attr("d", function (d) {
-                    if (d.source === d.target) {
-                        return widgetView.getPath(d.source.x, d.source.y, d.target.x, d.target.y)
-                    }
+                    return widgetView.getPathForLine(d.source.x, d.source.y, [], d.target.x, d.target.y, d.t_shape, d.source.id, d.target.id);
                 });
-
             if (widgetView.ticksSinceSync % 5 === 0) {
                 widgetView.syncBackend()
                 widgetView.ticksSinceSync = 0
@@ -488,7 +473,6 @@ let WidgetView = widgets.DOMWidgetView.extend({
     },
 
     moveLinkBends: function (d) {
-        const line = d3.line()
         let widgetView = this
         let bendMoverData = []
 
@@ -559,11 +543,10 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 .filter(function (data) {
                     return data.id === edgeId;
                 })
-                .attr("d", function (data) {
-                    data.bends[bendIndex][0] = event.x
-                    data.bends[bendIndex][1] = event.y
-                    let points = [[data.sx, data.sy]].concat(data.bends).concat([[data.tx, data.ty]])
-                    return line(points)
+                .attr("d", function (d) {
+                    d.bends[bendIndex][0] = event.x
+                    d.bends[bendIndex][1] = event.y
+                    return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
                 })
 
             if (bendIndex === 0) {
@@ -910,8 +893,6 @@ let WidgetView = widgets.DOMWidgetView.extend({
         }
 
         let widgetView = this
-        const line = d3.line()
-
         let l = d3.select(this.svg)
             .selectAll(".line_holder > .line")
             .filter(function (d) {
@@ -940,12 +921,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 d.tx = newLink.tx
                 d.ty = newLink.ty
 
-                if (d.source === d.target && d.bends.length === 0) {
-                    return widgetView.getPath(d.sx, d.sy, d.tx, d.ty)
-                }
-
-                let points = [[d.sx, d.sy]].concat(d.bends).concat([[d.tx, d.ty]])
-                return line(points)
+                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
             })
             .attr("stroke", function (d) {
                 d.strokeColor = link.strokeColor
@@ -965,12 +941,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 d.tx = link.tx
                 d.ty = link.ty
 
-                if (d.source === d.target && d.bends.length === 0) {
-                    return widgetView.getPath(d.sx, d.sy, d.tx, d.ty)
-                }
-
-                let points = [[d.sx, d.sy]].concat(d.bends).concat([[d.tx, d.ty]])
-                return line(points)
+                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
             })
             .attr("stroke-width", function (d) {
                 d.strokeWidth = link.strokeWidth
@@ -1080,7 +1051,6 @@ let WidgetView = widgets.DOMWidgetView.extend({
 
     moveNodeAndLinks: function (nodeId, newX, newY, d) {
         let widgetView = this
-        const line = d3.line()
 
         //move node
         d3.select(widgetView.svg)
@@ -1130,13 +1100,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                     labelsToMoveIds.push(d.id)
                 }
 
-                //self loop
-                if (d.source === d.target && d.bends.length === 0) {
-                    return widgetView.getPath(d.sx, d.sy, d.tx, d.ty);
-                }
-
-                let points = [[d.sx, d.sy]].concat(d.bends).concat([[d.tx, d.ty]])
-                return line(points)
+                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
             })
 
         //move link-label
@@ -1189,69 +1153,25 @@ let WidgetView = widgets.DOMWidgetView.extend({
     },
 
     constructForceLink(linkData, line_holder, widgetView, basic) {
-        if (linkData.source === linkData.target) {
-            line_holder
-                .data([linkData])
-                .enter()
-                .append("path")
-                .attr("class", "line")
-                .attr("id", function (d) {
-                    return d.id
-                })
-                .attr("d", function (d) {
-                    return widgetView.getPath(d.sx, d.sy, d.tx, d.ty)
-                })
-                .attr("stroke", function (d) {
-                    return widgetView.getColorStringFromJson(d.strokeColor)
-                })
-                .attr("stroke-width", function (d) {
-                    return d.strokeWidth
-                })
-                .attr("fill", "none")
-                .on("click", function (event, d) {
-                    if (basic) return
-                    widgetView.send({
-                        "code": "linkClicked",
-                        "id": d.id,
-                        "altKey": event.altKey,
-                        "ctrlKey": event.ctrlKey
-                    });
-                });
-            return
-        }
-
         line_holder
             .data([linkData])
             .enter()
-            .append("line")
+            .append("path")
             .attr("class", "line")
             .attr("id", function (d) {
                 return d.id
             })
             .attr("marker-end", function (d) {
-                if (d.arrow && d.t_shape === 0) {
+                if (d.arrow && d.t_shape === 0 && d.target !== d.source) {
                     return "url(#endSquare)";
-                } else if (d.arrow && d.t_shape !== 0) {
+                } else if (d.arrow && d.t_shape !== 0 && d.target !== d.source) {
                     return "url(#endCircle)";
                 } else {
                     return null;
                 }
             })
-            .attr("x1", function (d) {
-                if (d.sx == null) return
-                return d.sx
-            })
-            .attr("y1", function (d) {
-                if (d.sy == null) return
-                return d.sy
-            })
-            .attr("x2", function (d) {
-                if (d.tx == null) return
-                return d.tx
-            })
-            .attr("y2", function (d) {
-                if (d.ty == null) return
-                return d.ty
+            .attr("d", function (d) {
+                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
             })
             .attr("stroke", function (d) {
                 return widgetView.getColorStringFromJson(d.strokeColor)
@@ -1262,13 +1182,16 @@ let WidgetView = widgets.DOMWidgetView.extend({
             .attr("fill", "none")
             .on("click", function (event, d) {
                 if (basic) return
-                widgetView.send({"code": "linkClicked", "id": d.id, "altKey": event.altKey, "ctrlKey": event.ctrlKey});
+                widgetView.send({
+                    "code": "linkClicked",
+                    "id": d.id,
+                    "altKey": event.altKey,
+                    "ctrlKey": event.ctrlKey
+                });
             });
     },
 
     constructLink(linkData, line_holder, line_text_holder, line_click_holder, widgetView, clickThickness, basic) {
-        const line = d3.line()
-
         line_holder
             .data([linkData])
             .enter()
@@ -1287,12 +1210,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 }
             })
             .attr("d", function (d) {
-                if (d.source === d.target && d.bends.length === 0) {
-                    return widgetView.getPath(d.sx, d.sy, d.tx, d.ty)
-                }
-
-                let points = [[d.sx, d.sy]].concat(d.bends).concat([[d.tx, d.ty]])
-                return line(points)
+                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
             })
             .attr("stroke", function (d) {
                 return widgetView.getColorStringFromJson(d.strokeColor)
@@ -1335,12 +1253,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 return d.id
             })
             .attr("d", function (d) {
-                if (d.source === d.target && d.bends.length === 0) {
-                    return widgetView.getPath(d.sx, d.sy, d.tx, d.ty)
-                }
-
-                let points = [[d.sx, d.sy]].concat(d.bends).concat([[d.tx, d.ty]])
-                return line(points)
+                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
             })
             .attr("stroke", "transparent")
             .attr("stroke-width", function (d) {
@@ -1641,19 +1554,21 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 .attr("d", "M0,-5L10,0L0,5");
 
             //construct arrow for square
-            svg.append("svg:defs").selectAll("marker")
-                .data(["endSquare"])
-                .enter().append("svg:marker")
+            svg.append("svg:defs").selectAll("marker")//
+                .data(["endSquare"])      // Different link/path types can be defined here
+                .enter().append("svg:marker")    // This section adds in the arrows
                 .attr("id", String)
                 .attr("viewBox", "0 -5 10 10")
-                .attr("refX", (Math.sqrt(8 * radius * radius) / 2) * 4 / 3 + 8)
+                .attr("refX", 10)
                 .attr("refY", 0)
-                .attr("markerWidth", 8)
-                .attr("markerHeight", 8)
+                .attr("markerWidth", 5)
+                .attr("markerHeight", 5)
                 .attr("orient", "auto")
-                .attr("fill", "black")
+                .attr("stroke", "#000")
+                .attr("fill", "#000")
                 .append("svg:path")
-                .attr("d", "M0,-5L10,0L0,5");
+                .attr("d", "M0,-5L10,0L0,5")
+                .style("stroke-width", "0.3px")
         }
 
         this.readjustZoomLevel(this.getInitialTransform(radius))
@@ -1817,7 +1732,119 @@ let WidgetView = widgets.DOMWidgetView.extend({
          * With the result as `0.5em` the font will change to half its original size.
          */
         return (labelAvailableWidth / labelWidth - 0.01) + 'em';
-    }
+    },
+
+    getPathForLine(sx, sy, bends, tx, ty, shape, sId, tId) {
+        //self loop
+        if (sId === tId && bends.length === 0) {
+            return this.getPath(sx, sy, tx, ty)
+        }
+
+        const line = d3.line()
+        let points = [[sx, sy]].concat(bends)
+
+        //shape is a rectangle
+        if (shape === 0) {
+            let sourceX = sx
+            let sourceY = sy
+
+            if (bends.length !== 0) {
+                sourceX = bends[bends.length - 1][0]
+                sourceY = bends[bends.length - 1][1]
+            }
+
+            let node = this.nodes[tId]
+
+            let inter = this.pointOnRect(sourceX, sourceY,
+                tx - node.nodeWidth / 2, ty - node.nodeHeight / 2,
+                tx + node.nodeWidth / 2, ty + node.nodeHeight / 2, false);
+
+            return line(points) + "L" + inter.x + "," + inter.y;
+        }
+
+        points = points.concat([[tx, ty]])
+        return line(points)
+    },
+
+    /**
+     * Finds the intersection point between
+     *     * the rectangle
+     *       with parallel sides to the x and y axes
+     *     * the half-line pointing towards (x,y)
+     *       originating from the middle of the rectangle
+     *
+     * Note: the function works given min[XY] <= max[XY],
+     *       even though minY may not be the "top" of the rectangle
+     *       because the coordinate system is flipped.
+     *
+     * @param x:Number x-coord of point to build the line segment from
+     * @param y:Number y-coord of point to build the line segment from
+     * @param minX:Number the "left" side of the rectangle
+     * @param minY:Number the "top" side of the rectangle
+     * @param maxX:Number the "right" side of the rectangle
+     * @param maxY:Number the "bottom" side of the rectangle
+     * @param check:boolean (optional) whether to treat point inside the rect as error
+     * @return an object with x and y members for the intersection
+     * @throws if check == true and (x,y) is inside the rectangle
+     * @author TWiStErRob
+     * @see <a href="https://stackoverflow.com/a/31254199/253468">source</a>
+     * @see <a href="https://stackoverflow.com/a/18292964/253468">based on</a>
+     */
+    pointOnRect(x, y, minX, minY, maxX, maxY, check) {
+        //assert minX <= maxX;
+        //assert minY <= maxY;
+        check = true
+        if (check && (minX <= x && x <= maxX) && (minY <= y && y <= maxY)) {
+            console.log("Point " + [x, y] + "cannot be inside " + "the rectangle: " + [minX, minY] + " - " + [maxX, maxY] + ".");
+            return {
+                x: (minX + maxX) / 2,
+                y: (minY + maxY) / 2
+            };
+        }
+        const midX = (minX + maxX) / 2;
+        const midY = (minY + maxY) / 2;
+        // if (midX - x == 0) -> m == ±Inf -> minYx/maxYx == x (because value / ±Inf = ±0)
+        const m = (midY - y) / (midX - x);
+
+        if (x <= midX) { // check "left" side
+            const minXy = m * (minX - x) + y;
+            if (minY <= minXy && minXy <= maxY)
+                return {
+                    x: minX,
+                    y: minXy
+                };
+        }
+
+        if (x >= midX) { // check "right" side
+            const maxXy = m * (maxX - x) + y;
+            if (minY <= maxXy && maxXy <= maxY)
+                return {
+                    x: maxX,
+                    y: maxXy
+                };
+        }
+
+        if (y <= midY) { // check "top" side
+            const minYx = (minY - y) / m + x;
+            if (minX <= minYx && minYx <= maxX)
+                return {
+                    x: minYx,
+                    y: minY
+                };
+        }
+
+        if (y >= midY) { // check "bottom" side
+            const maxYx = (maxY - y) / m + x;
+            if (minX <= maxYx && maxYx <= maxX)
+                return {
+                    x: maxYx,
+                    y: maxY
+                };
+        }
+
+        // Should never happen :) If it does, please tell me!
+        throw "Cannot find intersection for " + [x, y] + " inside rectangle " + [minX, minY] + " - " + [maxX, maxY] + ".";
+    },
 });
 
 module.exports = {
