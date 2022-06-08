@@ -1,6 +1,12 @@
 from ogdf_python_widget._version import version_info, __version__
 
 
+def _auto_enable():
+    from ogdf_python_widget.pythonize import pythonize_to_html
+
+    pythonize_to_html()
+
+
 def _jupyter_labextension_paths():
     """Called by Jupyter Lab Server to detect if it is a valid labextension and
     to install the widget
