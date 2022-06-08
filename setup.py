@@ -52,6 +52,8 @@ setup_args = dict(
     include_package_data=True,
     install_requires=[
         'ipywidgets>=7.6.0',
+        'ogdf-python',
+        'importlib_resources'
     ],
     packages=find_packages(),
     zip_safe=False,

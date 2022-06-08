@@ -1,17 +1,11 @@
+from datetime import datetime
+
 import cppyy
 import ipywidgets as widgets
 from traitlets import Unicode, Dict, Integer, Float, Bool
-from datetime import datetime
-
 
 # See js/lib/ogdf-python-widget-view.js for the frontend counterpart to this file.
-
-def color_to_dict(color):
-    color = {"r": color.red(),
-             "g": color.green(),
-             "b": color.blue(),
-             "a": color.alpha()}
-    return color
+from ogdf_python_widget.pythonize import color_to_dict
 
 
 @widgets.register
@@ -68,6 +62,7 @@ class Widget(widgets.DOMWidget):
         self.graph_attributes = graph_attributes
         self.on_msg(self.handle_msg)
         if isinstance(self.graph_attributes, cppyy.gbl.ogdf.ClusterGraphAttributes):
+            cppyy.include("ogdf/cluster/ClusterGraphObserver.h")
             self.myClusterObserver = MyClusterGraphObserver(self.graph_attributes.constClusterGraph(), self)
 
         self.myObserver = MyGraphObserver(self.graph_attributes.constGraph(), self)
