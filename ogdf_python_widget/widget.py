@@ -62,7 +62,6 @@ class Widget(widgets.DOMWidget):
         self.graph_attributes = graph_attributes
         self.on_msg(self.handle_msg)
         if isinstance(self.graph_attributes, cppyy.gbl.ogdf.ClusterGraphAttributes):
-            cppyy.include("ogdf/cluster/ClusterGraphObserver.h")
             self.myClusterObserver = MyClusterGraphObserver(self.graph_attributes.constClusterGraph(), self)
 
         self.myObserver = MyGraphObserver(self.graph_attributes.constGraph(), self)
