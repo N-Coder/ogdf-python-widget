@@ -54,7 +54,7 @@ def link_to_dict(ga, link):
 
 def export_html(filename, nodes_data, links_data, force_directed):
     from importlib_resources import read_text
-    data = read_text(filename)
+    data = read_text("ogdf_python_widget", filename)
     data = data.replace("let nodes_data = []", "let nodes_data = " + json.dumps(nodes_data))
     data = data.replace("let links_data = []", "let links_data = " + json.dumps(links_data))
     # the G is needed because CSS3 selector doesnt support ID selectors that start with a digit

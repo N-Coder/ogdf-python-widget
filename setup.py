@@ -56,6 +56,7 @@ setup_args = dict(
         'importlib_resources'
     ],
     packages=find_packages(),
+    package_data={"": ["*.html", "*.json", "*.js", "*.txt"]},
     zip_safe=False,
     cmdclass=cmdclass,
     author='Andreas Strobl',
