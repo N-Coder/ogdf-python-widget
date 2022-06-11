@@ -798,6 +798,8 @@ let WidgetView = widgets.DOMWidgetView.extend({
             })
 
         if (this.isClusterGraph) {
+            //todo check if cluster of node changed
+
             const cluster = this.clusters[node.clusterId]
             //todo method that takes cluster and node to recalc
             this.recalculateClusterBoundingBox(cluster)
@@ -879,6 +881,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
         for (let i = this.links.length - 1; i >= 0; i--) {
             if (this.links[i].id === link.id) {
                 currentLink = this.links[i]
+                break
             }
         }
 
@@ -915,6 +918,8 @@ let WidgetView = widgets.DOMWidgetView.extend({
             .duration(this.animationDuration)
             .attr("d", function (d) {
                 let newLink = paddedLink == null ? link : paddedLink
+                d.source = newLink.source
+                d.target = newLink.target
                 d.sx = newLink.sx
                 d.sy = newLink.sy
                 d.bends = newLink.bends
@@ -935,6 +940,8 @@ let WidgetView = widgets.DOMWidgetView.extend({
         lc.transition()
             .duration(this.animationDuration)
             .attr("d", function (d) {
+                d.source = link.source
+                d.target = link.target
                 d.sx = link.sx
                 d.sy = link.sy
                 d.bends = link.bends
@@ -1794,6 +1801,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
         //assert minX <= maxX;
         //assert minY <= maxY;
         check = true
+        //todo change check
         if (check && (minX <= x && x <= maxX) && (minY <= y && y <= maxY)) {
             console.log("Point " + [x, y] + "cannot be inside " + "the rectangle: " + [minX, minY] + " - " + [maxX, maxY] + ".");
             return {
