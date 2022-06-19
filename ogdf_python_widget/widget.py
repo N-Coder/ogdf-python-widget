@@ -147,7 +147,6 @@ class Widget(widgets.DOMWidget):
 
     def stop_force_directed(self):
         self.force_config = {"stop": True}
-        self.refresh_graph()
 
     def get_node_from_id(self, node_id):
         for node in self.graph_attributes.constGraph().nodes:
