@@ -127,10 +127,11 @@ class Widget(widgets.DOMWidget):
             return
         for node in nodes:
             n = self.get_node_from_id(node['id'])
-            self.move_node_to(n, node['x'], node['y'])
+            if n is not None:
+                self.move_node_to(n, node['x'], node['y'])
 
     def start_force_directed(self, charge_force=-100, force_center_x=None, force_center_y=None,
-                             fix_start_position=True):
+                             fix_start_position=False):
         for link in self.graph_attributes.constGraph().edges:
             self.graph_attributes.bends(link).clear()
 
