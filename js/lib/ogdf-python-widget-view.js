@@ -465,6 +465,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             d.y = event.y
 
             //update OGDF when cluster and nodes got moved.
+            widgetView.updateClustersInOGDF()
             for (let i = 0; i < cluster.nodes.length; i++) {
                 let node = widgetView.nodes[cluster.nodes[i]];
                 widgetView.send({"code": "nodeMoved", "id": node.id, "x": node.x, "y": node.y});
@@ -595,6 +596,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             cluster.nodes.push(node.id)
             this.recalculateClusterBoundingBox(cluster)
             this.constructClusters(this.rootClusterId, false)
+            this.updateClustersInOGDF()
         }
 
         this.forceConfigChanged()
@@ -621,6 +623,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
         }
 
         this.constructClusters(this.rootClusterId)
+        this.updateClustersInOGDF()
     },
 
     deleteNodeById: function (nodeId) {
@@ -631,6 +634,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             cluster.nodes.splice(cluster.nodes.indexOf(nodeId), 1)
             this.recalculateClusterBoundingBox(cluster)
             this.constructClusters(this.rootClusterId, false)
+            this.updateClustersInOGDF()
         }
 
         delete this.nodes[nodeId];
@@ -715,6 +719,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
 
         //re-rendering clusters without calculating node bounding box
         this.constructClusters(this.rootClusterId, false);
+        this.updateClustersInOGDF()
     },
 
     updateNode: function (node, animated) {
@@ -804,6 +809,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             //todo method that takes cluster and node to recalc
             this.recalculateClusterBoundingBox(cluster)
             this.constructClusters(this.rootClusterId, false)
+            this.updateClustersInOGDF()
         }
 
         if (widgetView.forceDirected) {
@@ -1366,6 +1372,21 @@ let WidgetView = widgets.DOMWidgetView.extend({
         }
     },
 
+    updateClustersInOGDF: function () {
+        let clustersData = Object.values(this.clusters)
+        for (let i = 0; i < clustersData.length; i++) {
+            let c = clustersData[i]
+            this.send({
+                'code': 'updateClusterPosition',
+                'id': c.id,
+                'x': c.x,
+                'y': c.y,
+                'width': c.x2 - c.x,
+                'height': c.y2 - c.y,
+            });
+        }
+    },
+
     constructClusters: function (clusterId, calcNodeBoundingBox = true) {
         let cluster = this.clusters[clusterId]
         for (let i = 0; i < cluster.children.length; i++) {
@@ -1504,6 +1525,8 @@ let WidgetView = widgets.DOMWidgetView.extend({
 
         if (this.clusters != null && this.isClusterGraph)
             this.constructClusters(this.rootClusterId)
+
+        this.updateClustersInOGDF()
 
         //links
         this.line_holder = this.g.append("g")

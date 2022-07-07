@@ -119,6 +119,9 @@ class Widget(widgets.DOMWidget):
             self.export_graph()
         elif msg['code'] == 'positionUpdate':
             self.position_update(msg['nodes'].values())
+        elif msg['code'] == 'updateClusterPosition':
+            self.update_cluster_position(self.get_cluster_from_id(msg['id']), msg['x'], msg['y'], msg['width'],
+                                         msg['height'])
         if self.debug and msg['code'] != 'positionUpdate':
             print(msg)
 
@@ -179,6 +182,12 @@ class Widget(widgets.DOMWidget):
 
         bend.m_x = x
         bend.m_y = y
+
+    def update_cluster_position(self, cluster, x, y, width, height):
+        self.graph_attributes.x[cluster] = x
+        self.graph_attributes.y[cluster] = y
+        self.graph_attributes.width[cluster] = width
+        self.graph_attributes.height[cluster] = height
 
     def refresh_graph(self):
         self.send({"code": "clearGraph"})
