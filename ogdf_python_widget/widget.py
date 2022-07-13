@@ -122,7 +122,7 @@ class Widget(widgets.DOMWidget):
         elif msg['code'] == 'updateClusterPosition':
             self.update_cluster_position(self.get_cluster_from_id(msg['id']), msg['x'], msg['y'], msg['width'],
                                          msg['height'])
-        if self.debug and msg['code'] != 'positionUpdate':
+        if self.debug and msg['code'] != 'positionUpdate' and msg['code'] != 'updateClusterPosition':
             print(msg)
 
     def position_update(self, nodes):

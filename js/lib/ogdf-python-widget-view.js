@@ -97,6 +97,61 @@ let WidgetView = widgets.DOMWidgetView.extend({
         d3.select(this.svg).selectAll("text").remove()
         d3.select(this.svg).selectAll(".line").remove()
 
+        let invisibleNodes = []
+        let invisibleLinks = []
+
+        if (widgetView.isClusterGraph) {
+            let clusterData = Object.values(this.clusters)
+            for (let i = 0; i < clusterData.length; i++) {
+                invisibleNodes.push({
+                    "id": String(-parseInt(clusterData[i].id) - 1),
+                    "name": "test",
+                    "x": 0,
+                    "y": 0,
+                    "shape": 0,
+                    "fillColor": {
+                        "r": 0,
+                        "g": 0,
+                        "b": 0,
+                        "a": 100
+                    },
+                    "strokeColor": {
+                        "r": 0,
+                        "g": 0,
+                        "b": 0,
+                        "a": 100
+                    },
+                    "strokeWidth": 1,
+                    "nodeWidth": 30,
+                    "nodeHeight": 30
+                })
+
+                for (let j = 0; j < clusterData[i].nodes.length; j++) {
+                    invisibleLinks.push({
+                        "strongerLink": true,
+                        "id": String((i + 1) * 1000000000 + j),
+                        "label": "",
+                        "source": String(-parseInt(clusterData[i].id) - 1),
+                        "target": clusterData[i].nodes[j],
+                        "t_shape": 0,
+                        "strokeColor": {
+                            "r": 0,
+                            "g": 0,
+                            "b": 0,
+                            "a": 100
+                        },
+                        "strokeWidth": 1,
+                        "sx": 0,
+                        "sy": 0,
+                        "tx": 0,
+                        "ty": 0,
+                        "arrow": true,
+                        "bends": []
+                    })
+                }
+            }
+        }
+
         for (let i = 0; i < this.links.length; i++) {
             this.constructForceLink(this.links[i], this.line_holder, this, false)
         }
@@ -110,17 +165,28 @@ let WidgetView = widgets.DOMWidgetView.extend({
             widgetView.rescaleAllText()
         }, 10)
 
-        this.simulation = d3.forceSimulation().nodes(nodesData)
+        this.simulation = d3.forceSimulation().nodes(nodesData.concat(invisibleNodes))
             .on('end', function () {
                 widgetView.syncBackend()
             });
 
-        let link_force = d3.forceLink(this.links).id(function (d) {
+        let link_force = d3.forceLink(this.links.concat(invisibleLinks)).id(function (d) {
             return d.id;
-        });
+        }).strength(function (link) {
+            if (link.strongerLink) {
+                return 0.6;
+            } else {
+                if (link.source.clusterId === link.target.clusterId)
+                    return 0.2;
+                else
+                    return 0.1;
+            }
+        })
 
         let charge_force = d3.forceManyBody().strength(function (d) {
-            console.log(d)
+            if (d.id < 0)
+                return forceConfig.chargeForce * 10
+
             return forceConfig.chargeForce
         });
 
