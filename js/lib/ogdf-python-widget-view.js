@@ -238,8 +238,10 @@ let WidgetView = widgets.DOMWidgetView.extend({
             if (widgetView.ticksSinceSync % 5 === 0) {
                 widgetView.syncBackend()
                 widgetView.ticksSinceSync = 0
-                widgetView.constructClusters(widgetView.rootClusterId)
-                widgetView.updateClustersInOGDF()
+                if (widgetView.isClusterGraph) {
+                    widgetView.constructClusters(widgetView.rootClusterId)
+                    widgetView.updateClustersInOGDF()
+                }
             }
         }
     },
