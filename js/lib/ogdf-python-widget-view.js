@@ -119,7 +119,10 @@ let WidgetView = widgets.DOMWidgetView.extend({
             return d.id;
         });
 
-        let charge_force = d3.forceManyBody().strength(forceConfig.chargeForce);
+        let charge_force = d3.forceManyBody().strength(function (d) {
+            console.log(d)
+            return forceConfig.chargeForce
+        });
 
         let center_force = d3.forceCenter(forceConfig.forceCenterX, forceConfig.forceCenterY);
 
@@ -169,6 +172,8 @@ let WidgetView = widgets.DOMWidgetView.extend({
             if (widgetView.ticksSinceSync % 5 === 0) {
                 widgetView.syncBackend()
                 widgetView.ticksSinceSync = 0
+                widgetView.constructClusters(widgetView.rootClusterId)
+                widgetView.updateClustersInOGDF()
             }
         }
     },
@@ -1722,6 +1727,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                     d.y = widgetView.gridSize * Math.floor((event.y / widgetView.gridSize) + 0.5);
                 }
                 widgetView.send({"code": "nodeMoved", "id": this.id, "x": d.x, "y": d.y});
+                widgetView.updateClustersInOGDF();
             }
 
             if (widgetView.isClusterGraph) delete widgetView.clusters[d.clusterId].bbWoutDragged

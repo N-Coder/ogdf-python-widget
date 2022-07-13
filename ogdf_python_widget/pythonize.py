@@ -52,16 +52,28 @@ def link_to_dict(ga, link):
     return link_dict
 
 
-def export_html(filename, nodes_data, links_data, force_directed):
+def export_html(filename, nodes_data, links_data, cluster_data, force_directed):
     from importlib_resources import read_text
     data = read_text("ogdf_python_widget", filename)
     data = data.replace("let nodes_data = []", "let nodes_data = " + json.dumps(nodes_data))
     data = data.replace("let links_data = []", "let links_data = " + json.dumps(links_data))
+    data = data.replace("let clusters_data = []", "let clusters_data = " + json.dumps(cluster_data))
     # the G is needed because CSS3 selector doesnt support ID selectors that start with a digit
     data = data.replace("placeholderId", 'G' + uuid.uuid4().hex)
     if not force_directed:
         data = data.replace("let forceDirected = true;", "let forceDirected = false;")
     return data
+
+
+def cluster_to_dict(self, cluster):
+    return {"id": str(cluster.index()),
+            "name": str(self.label(cluster)),
+            "x": int(self.x(cluster) + 0.5),
+            "y": int(self.y(cluster) + 0.5),
+            "x2": int(self.x(cluster) + 0.5) + self.width(cluster),
+            "y2": int(self.y(cluster) + 0.5) + self.height(cluster),
+            "strokeColor": color_to_dict(self.strokeColor(cluster)),
+            "strokeWidth": self.strokeWidth(cluster)}
 
 
 def GraphAttributes_to_html(self):
@@ -71,11 +83,13 @@ def GraphAttributes_to_html(self):
                       for node in self.nodes]
         links_data = [{"source": str(edge.source().index()), "target": str(edge.target().index())}
                       for edge in self.edges]
-        return export_html('basicGraphRepresentation.html', nodes_data, links_data, True)
+        return export_html('basicGraphRepresentation.html', nodes_data, links_data, [], True)
     elif isinstance(self, ogdf.GraphAttributes):
         nodes_data = [node_to_dict(self, node) for node in self.constGraph().nodes]
         links_data = [link_to_dict(self, link) for link in self.constGraph().edges]
-        return export_html('basicGraphRepresentation.html', nodes_data, links_data, False)
+        if isinstance(self, ogdf.ClusterGraphAttributes):
+            cluster_data = [cluster_to_dict(self, cluster) for cluster in self.constClusterGraph().clusters]
+        return export_html('basicGraphRepresentation.html', nodes_data, links_data, cluster_data, False)
     else:
         return repr(self)
 

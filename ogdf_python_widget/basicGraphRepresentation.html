@@ -25,6 +25,7 @@
         //data will get filled from the python code
         let nodes_data = []
         let links_data = []
+        let clusters_data = []
 
         this.g = svg.append("g").attr("class", "everything");
         let radius
@@ -173,6 +174,17 @@
 
             for (let i = 0; i < nodes_data.length; i++) {
                 constructNode(nodes_data[i], this.node_holder, this.text_holder, this, true)
+            }
+
+            //clusters
+            if (clusters_data.length !== 0) {
+                this.cluster_holder = this.g.append("g")
+                    .attr("class", "cluster_holder")
+                    .selectAll(".cluster")
+
+                for (let i = 0; i < clusters_data.length; i++) {
+                    constructCluster(clusters_data[i], this.cluster_holder)
+                }
             }
         }
 
@@ -422,6 +434,30 @@
             }
         }
 
+        function constructCluster(clusterData, cluster_holder) {
+            const line = d3.line()
+
+            cluster_holder
+                .data([clusterData])
+                .enter()
+                .append("path")
+                .attr("class", "cluster")
+                .attr("id", function (d) {
+                    return d.id
+                })
+                .attr("d", function (d) {
+                    let points = [[d.x, d.y], [d.x2, d.y], [d.x2, d.y2], [d.x, d.y2], [d.x, d.y]]
+                    return line(points)
+                })
+                .attr("stroke", function (d) {
+                    return getColorStringFromJson(d.strokeColor)
+                })
+                .attr("stroke-width", function (d) {
+                    return d.strokeWidth
+                })
+                .attr("fill", "none")
+        }
+
         function constructArrowElements(radius) {
             //construct arrow for circle
             svg.append("svg:defs").selectAll("marker")
@@ -487,9 +523,9 @@
             event.subject.fy = null;
         }
 
-        if(!forceDirected) svg.call(d3.zoom().transform, getInitialTransform(radius, width, height))
+        if (!forceDirected) svg.call(d3.zoom().transform, getInitialTransform(radius, width, height))
         svg.call(d3.zoom().on("zoom", zoomed));
-        if(!forceDirected) g.attr("transform", getInitialTransform(radius, width, height))
+        if (!forceDirected) g.attr("transform", getInitialTransform(radius, width, height))
 
         function zoomed({transform}) {
             g.attr("transform", transform);
