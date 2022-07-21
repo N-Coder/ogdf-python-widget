@@ -87,6 +87,7 @@ def GraphAttributes_to_html(self):
     elif isinstance(self, ogdf.GraphAttributes):
         nodes_data = [node_to_dict(self, node) for node in self.constGraph().nodes]
         links_data = [link_to_dict(self, link) for link in self.constGraph().edges]
+        cluster_data = []
         if isinstance(self, ogdf.ClusterGraphAttributes):
             cluster_data = [cluster_to_dict(self, cluster) for cluster in self.constClusterGraph().clusters]
         return export_html('basicGraphRepresentation.html', nodes_data, links_data, cluster_data, False)
