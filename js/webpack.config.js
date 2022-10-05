@@ -22,7 +22,7 @@ module.exports = (env, argv) => {
             entry: './lib/extension.js',
             output: {
                 filename: 'extension.js',
-                path: path.resolve(__dirname, '..', 'ogdf_python_widget', 'nbextension'),
+                path: path.resolve(__dirname, '..', 'install', 'nbextension'),
                 libraryTarget: 'amd',
                 publicPath: '' // publicPath is set in extension.js
             },
@@ -37,7 +37,7 @@ module.exports = (env, argv) => {
             entry: './lib/index.js',
             output: {
                 filename: 'index.js',
-                path: path.resolve(__dirname, '..', 'ogdf_python_widget', 'nbextension'),
+                path: path.resolve(__dirname, '..', 'install', 'nbextension'),
                 libraryTarget: 'amd',
                 publicPath: '',
             },

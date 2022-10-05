@@ -1,3 +1,64 @@
+[project]
+name = "ogdf-python-widget"
+description = "A Custom Jupyter Widget Library"
+readme = "README.md"
+license = ""
+homepage = "https://github.com/ogdf/ogdf-python-widget"
+authors = [
+    { name = "Andreas Strobl", email = "strobland@fim.uni-passau.de" },
+    { name = "Simon D. Fink", email = "finksim@fim.uni-passau.de" },
+]
+keywords = ["ipython", "jupyter", "widgets", "ogdf", "graph", "network", "drawing", "algorithm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: IPython",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Topic :: Multimedia :: Graphics",
+]
+dependencies = [
+    "importlib_resources",
+    "ipywidgets>=7.6.0",
+    "ogdf-python",
+]
+dynamic = ["version"]
+
+[tool.hatch.version]
+source = "code"
+path = "ogdf_python_widget/_version.py"
+
+[tool.hatch.build.targets.wheel.shared-data]
+"install/nbextension" = "share/jupyter/nbextensions/ogdf-python-widget"
+"install/labextension" = "share/jupyter/labextensions/ogdf-python-widget"
+"install/install.json" = "share/jupyter/labextensions/ogdf-python-widget/install.json"
+"install/ogdf-python-widget.json" = "etc/jupyter/nbconfig/notebook.d/ogdf-python-widget.json"
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    ".github",
+]
+
+[tool.hatch.build.hooks.jupyter-builder]
+ensured-targets = [
+    "js/dist/index.js",
+]
+dependencies = [
+    "hatch-jupyter-builder>=0.7.1",
+]
+build-function = "hatch_jupyter_builder.npm_builder"
+
+[tool.hatch.build.hooks.jupyter-builder.build-kwargs]
+path = "js"
+build_cmd = "build:prod"
+npm = ["yarn"]
+
 [build-system]
-requires = ["jupyter_packaging~=0.7.9", "jupyterlab>=3.0.0,==3.*", "setuptools>=40.8.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = [
+    "hatchling>=1.10.0",
+    "jupyterlab>=3.0.0,==3.*",
+]
+build-backend = "hatchling.build"
