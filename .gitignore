@@ -8,8 +8,8 @@ node_modules/
 js/yarn.lock
 
 # Compiled javascript
-ogdf_python_widget/nbextension/
-ogdf_python_widget/labextension/
+install/nbextension/
+install/labextension/
 
 # OS X
 .DS_Store
