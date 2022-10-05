@@ -1,5 +1,0 @@
-setuptools~=57.4.0
-ipywidgets~=7.6.3
-ipykernel~=6.2.0
-cppyy~=2.1.0
-traitlets~=5.0.5

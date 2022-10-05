@@ -22,7 +22,7 @@ classifiers = [
 ]
 dependencies = [
     "importlib_resources",
-    "ipywidgets>=7.6.0",
+    "ipywidgets>=7,<8",
     "ogdf-python",
 ]
 dynamic = ["version"]
