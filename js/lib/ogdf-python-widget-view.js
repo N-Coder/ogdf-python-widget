@@ -61,6 +61,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
         this.nodes = []
         this.links = []
         this.clusters = []
+        this.virtualLinks = []
 
         this.width = this.model.get('width')
         this.height = this.model.get('height')
@@ -152,8 +153,9 @@ let WidgetView = widgets.DOMWidgetView.extend({
             }
         }
 
-        for (let i = 0; i < this.links.length; i++) {
-            this.constructForceLink(this.links[i], this.line_holder, this, false)
+        let linksData = Object.values(this.links)
+        for (let i = 0; i < linksData.length; i++) {
+            this.constructForceLink(linksData[i], this.line_holder, this, false)
         }
 
         let nodesData = Object.values(this.nodes)
@@ -170,7 +172,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 widgetView.syncBackend()
             });
 
-        let link_force = d3.forceLink(this.links.concat(invisibleLinks)).id(function (d) {
+        let link_force = d3.forceLink(linksData.concat(invisibleLinks)).id(function (d) {
             return d.id;
         }).strength(function (link) {
             if (link.strongerLink) {
@@ -233,8 +235,33 @@ let WidgetView = widgets.DOMWidgetView.extend({
             d3.select(widgetView.svg)
                 .selectAll(".line")
                 .attr("d", function (d) {
+                    d.sx = d.source.x
+                    d.sy = d.source.y
+                    d.tx = d.target.x
+                    d.ty = d.target.y
                     return widgetView.getPathForLine(d.source.x, d.source.y, [], d.target.x, d.target.y, d.t_shape, d.source.id, d.target.id);
                 });
+
+            d3.select(widgetView.svg)
+                .selectAll(".virtualLink")
+                .attr("x1", function (d) {
+                    let sourceLink = widgetView.links[d.sourceId]
+                    return (sourceLink.sx + sourceLink.tx) / 2
+                })
+                .attr("y1", function (d) {
+                    let sourceLink = widgetView.links[d.sourceId]
+                    return (sourceLink.sy + sourceLink.ty) / 2
+                })
+                .attr("x2", function (d) {
+                    let targetLink = widgetView.links[d.targetId]
+                    return (targetLink.sx + targetLink.tx) / 2
+                })
+                .attr("y2", function (d) {
+                    let targetLink = widgetView.links[d.targetId]
+                    return (targetLink.sy + targetLink.ty) / 2
+                })
+
+
             if (widgetView.ticksSinceSync % 5 === 0) {
                 widgetView.syncBackend()
                 widgetView.ticksSinceSync = 0
@@ -253,6 +280,18 @@ let WidgetView = widgets.DOMWidgetView.extend({
         if (this.simulation != null) {
             this.simulation.stop()
             this.simulation = null
+        }
+
+        //reset links to non-force links
+        //only needed for SPQR-Trees since other graph types simply get reexported.
+        if (this.isSPQRTree) {
+            d3.select(this.svg).selectAll(".line").remove()
+            let linksData = Object.values(this.links)
+            for (let i = 0; i < linksData.length; i++) {
+                linksData[i].source = linksData[i].source.id
+                linksData[i].target = linksData[i].target.id
+                this.constructLink(linksData[i], this.line_holder, this.line_text_holder, this.line_click_holder, this, this.clickThickness, false)
+            }
         }
     },
 
@@ -279,7 +318,8 @@ let WidgetView = widgets.DOMWidgetView.extend({
     },
 
     syncBackend: function () {
-        this.send({'code': 'positionUpdate', 'nodes': this.nodes})
+        if (!this.isSPQRTree)
+            this.send({'code': 'positionUpdate', 'nodes': this.nodes})
     },
 
     animationDurationChanged: function () {
@@ -313,7 +353,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
 
     getInitialTransform: function (radius) {
         let nodesData = Object.values(this.nodes)
-        let boundingBox = this.getBoundingBox(nodesData, this.links)
+        let boundingBox = this.getBoundingBox(nodesData, Object.values(this.links))
 
         let boundingBoxWidth = boundingBox.maxX - boundingBox.minX + radius * 2
         let boundingBoxHeight = boundingBox.maxY - boundingBox.minY + radius * 2
@@ -347,6 +387,10 @@ let WidgetView = widgets.DOMWidgetView.extend({
         svg.call(zoom.transform, transform)
         svg.call(zoom.on('zoom', zoomed).on('end', zoomEnded));
         svg.call(zoom)
+
+        if (this.g == null)
+            return
+
         this.g.attr("transform", transform)
         this.updateZoomLevelInModel(transform)
 
@@ -384,7 +428,11 @@ let WidgetView = widgets.DOMWidgetView.extend({
             this.clusters = msg.clusters
             this.rootClusterId = msg.rootClusterId
             this.isClusterGraph = this.rootClusterId !== '-1'
+            this.isSPQRTree = msg.SPQRtree
+            if (this.isSPQRTree)
+                this.virtualLinks = msg.virtualLinks
             this.render()
+            this.forceConfigChanged()
         } else if (msg.code === 'nodeAdded') {
             this.addNode(msg.data)
         } else if (msg.code === 'linkAdded') {
@@ -677,7 +725,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
 
     addLink: function (link) {
         if (this.forceDirected) this.stopForceLayout()
-        this.links.push(link)
+        this.links[link.id] = link
         this.constructLink(link, this.line_holder, this.line_text_holder, this.line_click_holder, this, this.clickThickness, false)
         this.forceConfigChanged()
     },
@@ -729,9 +777,11 @@ let WidgetView = widgets.DOMWidgetView.extend({
 
     deleteLinkById: function (linkId) {
         if (this.forceDirected) this.stopForceLayout()
-        for (let i = this.links.length - 1; i >= 0; i--) {
-            if (this.links[i].id === linkId) {
-                this.links.splice(i, 1);
+        delete this.links[linkId]
+
+        for (let i = this.virtualLinks.length - 1; i >= 0; i--) {
+            if (this.virtualLinks[i].sourceId === linkId || this.virtualLinks[i].targetId === linkId) {
+                this.virtualLinks.splice(i, 1);
             }
         }
 
@@ -748,6 +798,14 @@ let WidgetView = widgets.DOMWidgetView.extend({
             .filter(function (d) {
                 return d.id === linkId;
             }).remove()
+
+        if (this.isSPQRTree) {
+            d3.select(widgetView.svg)
+                .selectAll(".virtualLink")
+                .filter(function (d) {
+                    return d.sourceId === movedLinkIds[i] || d.targetId === movedLinkIds[i];
+                }).remove()
+        }
 
         this.forceConfigChanged()
     },
@@ -956,15 +1014,9 @@ let WidgetView = widgets.DOMWidgetView.extend({
         }
 
         //artificially add bends to make animation better
-        let currentLink
-        for (let i = this.links.length - 1; i >= 0; i--) {
-            if (this.links[i].id === link.id) {
-                currentLink = this.links[i]
-                break
-            }
-        }
-
+        let currentLink = this.links[link.id]
         let paddedLink = null
+
         if (currentLink !== null && currentLink.bends.length !== link.bends.length) {
             if (currentLink.bends.length < link.bends.length) {
                 this.deleteLinkById(link.id)
@@ -1087,11 +1139,16 @@ let WidgetView = widgets.DOMWidgetView.extend({
 
     clearGraph: function () {
         this.nodes = {}
-        this.links = []
+        this.links = {}
+        this.clusters = {}
+        this.virtualLinks = []
 
         d3.select(this.svg).selectAll(".node").remove()
         d3.select(this.svg).selectAll("text").remove()
         d3.select(this.svg).selectAll(".line").remove()
+        d3.select(this.svg).selectAll(".linkLabel").remove()
+        d3.select(this.svg).selectAll(".virtualLink").remove()
+        d3.select(this.svg).selectAll(".cluster").remove()
     },
 
     getBoundingBox: function (nodes, links) {
@@ -1166,6 +1223,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             });
 
         let labelsToMoveIds = []
+        let movedLinkIds = []
         //move attached links
         d3.select(widgetView.svg)
             .selectAll(".line")
@@ -1173,6 +1231,8 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 return data.source === nodeId || data.target === nodeId;
             })
             .attr("d", function (d) {
+                movedLinkIds.push(d.id)
+
                 if (d.source === nodeId) {
                     d.sx = newX
                     d.sy = newY
@@ -1202,6 +1262,33 @@ let WidgetView = widgets.DOMWidgetView.extend({
                     return "translate(" + labelX + "," + labelY + ")";
                 });
         }
+
+        //move VirtualLink
+        if (widgetView.isSPQRTree && movedLinkIds.length !== 0) {
+            for (let i = 0; i < movedLinkIds.length; i++) {
+                d3.select(widgetView.svg)
+                    .selectAll(".virtualLink")
+                    .filter(function (d) {
+                        return d.sourceId === movedLinkIds[i] || d.targetId === movedLinkIds[i];
+                    })
+                    .attr("x1", function (d) {
+                        let sourceLink = widgetView.links[d.sourceId]
+                        return (sourceLink.sx + sourceLink.tx) / 2
+                    })
+                    .attr("y1", function (d) {
+                        let sourceLink = widgetView.links[d.sourceId]
+                        return (sourceLink.sy + sourceLink.ty) / 2
+                    })
+                    .attr("x2", function (d) {
+                        let targetLink = widgetView.links[d.targetId]
+                        return (targetLink.sx + targetLink.tx) / 2
+                    })
+                    .attr("y2", function (d) {
+                        let targetLink = widgetView.links[d.targetId]
+                        return (targetLink.sy + targetLink.ty) / 2
+                    })
+            }
+        }
     },
 
     removeBendMoversForLink: function (linkId) {
@@ -1229,7 +1316,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             this.el.appendChild(this.svg)
         }
 
-        this.draw_graph(this.links)
+        this.draw_graph()
 
         let widgetView = this;
 
@@ -1349,6 +1436,33 @@ let WidgetView = widgets.DOMWidgetView.extend({
             .on("click", function (event, d) {
                 widgetView.send({"code": "linkClicked", "id": d.id, "altKey": event.altKey, "ctrlKey": event.ctrlKey});
             })
+    },
+
+    constructVirtualLink(vLinkData, line_holder, widgetView) {
+        line_holder
+            .data([vLinkData])
+            .enter()
+            .append("line")
+            .attr("x1", function (d) {
+                let sourceLink = widgetView.links[d.sourceId]
+                return (sourceLink.sx + sourceLink.tx) / 2
+            })
+            .attr("y1", function (d) {
+                let sourceLink = widgetView.links[d.sourceId]
+                return (sourceLink.sy + sourceLink.ty) / 2
+            })
+            .attr("x2", function (d) {
+                let targetLink = widgetView.links[d.targetId]
+                return (targetLink.sx + targetLink.tx) / 2
+            })
+            .attr("y2", function (d) {
+                let targetLink = widgetView.links[d.targetId]
+                return (targetLink.sy + targetLink.ty) / 2
+            })
+            .attr("stroke", "black")
+            .attr("stroke-width", 1)
+            .attr("fill", "none")
+            .attr("class", "virtualLink");
     },
 
     constructNode(nodeData, node_holder, text_holder, widgetView, basic) {
@@ -1559,7 +1673,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
         return "M" + x1 + "," + y1 + "A" + drx + "," + dry + " " + xRotation + "," + largeArc + "," + 1 + " " + (x2 + 1) + "," + (y2 + 1);
     },
 
-    draw_graph(links_data) {
+    draw_graph() {
         let widgetView = this
         const svg = d3.select(this.svg)
 
@@ -1582,6 +1696,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
         })
 
         let nodesData = Object.values(this.nodes)
+        let linksData = Object.values(this.links)
 
         let radius = nodesData.length > 0 ? nodesData[0].nodeWidth / 2 : 0
 
@@ -1614,11 +1729,21 @@ let WidgetView = widgets.DOMWidgetView.extend({
             .attr("class", "line_text_holder")
             .selectAll(".lineText")
 
-        for (let i = 0; i < links_data.length; i++) {
-            widgetView.constructLink(links_data[i], this.line_holder, this.line_text_holder, this.line_click_holder, widgetView, this.clickThickness, false)
+        for (let i = 0; i < linksData.length; i++) {
+            widgetView.constructLink(linksData[i], this.line_holder, this.line_text_holder, this.line_click_holder, widgetView, this.clickThickness, false)
         }
 
         this.bendMover_holder = this.g.append("g").attr("class", "bendMover_holder").selectAll("bendMover")
+
+        //SPQR
+
+        this.virtual_line_holder = this.g.append("g")
+            .attr("class", "virtual_line_holder")
+            .selectAll(".virtualLink")
+
+        for (let i = 0; i < this.virtualLinks.length; i++) {
+            this.constructVirtualLink(this.virtualLinks[i], this.virtual_line_holder, widgetView)
+        }
 
         //nodes
         widgetView.node_drag_handler = d3.drag()
@@ -1794,7 +1919,8 @@ let WidgetView = widgets.DOMWidgetView.extend({
                     d.x = widgetView.gridSize * Math.floor((event.x / widgetView.gridSize) + 0.5);
                     d.y = widgetView.gridSize * Math.floor((event.y / widgetView.gridSize) + 0.5);
                 }
-                widgetView.send({"code": "nodeMoved", "id": this.id, "x": d.x, "y": d.y});
+                if (!widgetView.isSPQRTree)
+                    widgetView.send({"code": "nodeMoved", "id": this.id, "x": d.x, "y": d.y});
                 widgetView.updateClustersInOGDF();
             }
 
