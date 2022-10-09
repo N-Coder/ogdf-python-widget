@@ -1,0 +1,55 @@
+name: Build python dist package
+
+on:
+  push:
+    branches: main
+  pull_request:
+    branches: "*"
+
+jobs:
+  build:
+    runs-on: debian-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.10"
+      - name: Download wheel
+        uses: actions/download-artifact@v3
+        with:
+          name: dist
+        # TODO make this depend on the build job to have its artifacts available
+      - name: Install firefox and imagemagick
+        run: sudo apt-get update && sudo apt-get install -y firefox-esr imagemagick
+      - name: Install wheel, including the dependencies needed for testing
+        run: ls -R; pip install ./ogdf-python-widget*.whl[test] # see project.optional-dependencies in pyproject.toml
+      - name: Make screenshots
+        run: python test/test_rendering.py test/notebooks/*.ipynb # TODO enable shell globbing for this to work
+      - name: Upload screenshots to GitHub
+        uses: actions/upload-artifact@v3
+        with:
+          name: out
+          path: |
+            out
+      - name: Compare the screenshots with the reference image
+        run: >-
+          mkdir diff;
+          cd out;
+          find -name '.png' -print -exec
+            compare -metric AE -fuzz 5% '{}' '../test/ref/{}' '../diff/{}'
+          ';'
+        # this compares the first two paths pixel-by-pixel and writes the diff to the third path
+        # it then reports the absolute error (i.e. numbers of differing pixels) with a 5% tolerance
+        # see https://www.imagemagick.org/Usage/compare/, https://imagemagick.org/script/compare.php
+      - name: Upload diffs to GitHub
+        uses: actions/upload-artifact@v3
+        with:
+          name: diff
+          path: |
+            diff
+      - name: Check that all images and no error files were created
+        run: diff <(find test/ref | sort) <(find out | sort)
+# TODO this job should fail if any of the screenshots differs to much, or the file listings don't match
+#      in the best case, we still generate&upload the full outputs even if intermediate steps fail
