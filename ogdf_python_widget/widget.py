@@ -33,6 +33,17 @@ def get_link_stabilizer(source_id, target_id):
     return twin_link_connector
 
 
+def wait_for_frontend(func):
+    def my_wrap(self, *args, **kwargs):
+        if self.widget_ready:
+            return func(self, *args, **kwargs)
+        else:
+            print("Try again the widget isn't ready yet.")
+            return
+
+    return my_wrap
+
+
 @widgets.register
 class Widget(widgets.DOMWidget):
     # Name of the widget view class in front-end
@@ -163,12 +174,9 @@ class Widget(widgets.DOMWidget):
             if n is not None:
                 self.move_node_to(n, node['x'], node['y'])
 
+    @wait_for_frontend
     def start_force_directed(self, charge_force=-100, force_center_x=None, force_center_y=None,
                              fix_start_position=False):
-        # todo check this at more places | maybe with decorator?
-        if not self.widget_ready:
-            print("Try again the widget wasn't ready yet.")
-            return
         if not self.is_SPQR_tree:
             for link in self.graph_attributes.constGraph().edges:
                 self.graph_attributes.bends(link).clear()
@@ -184,6 +192,7 @@ class Widget(widgets.DOMWidget):
                              "fixStartPosition": fix_start_position,
                              "stop": False}
 
+    @wait_for_frontend
     def stop_force_directed(self):
         self.force_config = {"stop": True}
         if not self.is_SPQR_tree:
@@ -340,99 +349,101 @@ class Widget(widgets.DOMWidget):
                 "children": children_data,
                 "nodes": nodes}
 
-    def export_graph(self):
+    def export_spqr_tree(self):
         nodes_data = {}
         links_data = {}
+        virtual_links = []
+
+        for graph in self.graph_attributes.tree().nodes:
+            skeleton = self.graph_attributes.skeleton(graph)
+            for node in skeleton.getGraph().nodes:
+                node_id = "G" + str(graph.index()) + "N" + str(node.index())
+                nodes_data[node_id] = {"id": node_id,
+                                       "name": node_id,
+                                       "x": 0,
+                                       "y": 0,
+                                       "shape": 2,
+                                       "fillColor": {
+                                           'r': 255,
+                                           'g': 255,
+                                           'b': 255,
+                                           'a': 255
+                                       },
+                                       'strokeColor': {
+                                           'r': 0,
+                                           'g': 0,
+                                           'b': 0,
+                                           'a': 255
+                                       },
+                                       "strokeWidth": 2,
+                                       "nodeWidth": 30,
+                                       "nodeHeight": 30}
+
+            for link in self.graph_attributes.skeleton(graph).getGraph().edges:
+                link_data = {"id": "G" + str(graph.index()) + "E" + str(link.index()),
+                             "label": "",
+                             "source": "G" + str(graph.index()) + "N" + str(link.source().index()),
+                             "target": "G" + str(graph.index()) + "N" + str(link.target().index()),
+                             "t_shape": 2,
+                             'strokeColor': {
+                                 'r': 0,
+                                 'g': 0,
+                                 'b': 0,
+                                 'a': 255
+                             },
+                             "strokeWidth": 1,
+                             "sx": 0,
+                             "sy": 0,
+                             "tx": 0,
+                             "ty": 0,
+                             "arrow": False,
+                             "bends": [],
+                             "label_x": 0,
+                             "label_y": 0}
+
+                twin_link = skeleton.twinEdge(link)
+                if bool(twin_link):
+                    sourceId = "G" + str(graph.index()) + "E" + str(link.index())
+                    targetId = "G" + str(skeleton.twinTreeNode(link).index()) + "E" + str(twin_link.index())
+                    duplicate_vlink = False
+
+                    for virtualLink in virtual_links:
+                        if virtualLink["sourceId"] == targetId and virtualLink["targetId"] == sourceId:
+                            duplicate_vlink = True
+
+                    if not duplicate_vlink:
+                        virtual_links.append({"id": sourceId + targetId,
+                                              "sourceId": sourceId,
+                                              "targetId": targetId})
+
+                    source_id_1 = "G" + str(graph.index()) + "N" + str(link.source().index())
+                    target_id_1 = "G" + str(skeleton.twinTreeNode(link).index()) + "N" + str(
+                        twin_link.source().index())
+
+                    twin_link_connector_1 = get_link_stabilizer(source_id_1, target_id_1)
+
+                    source_id_2 = "G" + str(graph.index()) + "N" + str(link.target().index())
+                    target_id_2 = "G" + str(skeleton.twinTreeNode(link).index()) + "N" + str(
+                        twin_link.target().index())
+
+                    twin_link_connector_2 = get_link_stabilizer(source_id_2, target_id_2)
+
+                    links_data[twin_link_connector_1['id']] = twin_link_connector_1
+                    links_data[twin_link_connector_2['id']] = twin_link_connector_2
+
+                links_data[link_data['id']] = link_data
+
+        self.send({'code': 'initGraph', 'nodes': nodes_data, 'links': links_data, 'clusters': {},
+                   'rootClusterId': '-1', 'SPQRtree': True, 'virtualLinks': virtual_links})
+        return
+
+    def export_graph(self):
         if self.is_SPQR_tree:
-            virtual_links = []
-            for graph in self.graph_attributes.tree().nodes:
-                skeleton = self.graph_attributes.skeleton(graph)
-                for node in skeleton.getGraph().nodes:
-                    node_id = "G" + str(graph.index()) + "N" + str(node.index())
-                    nodes_data[node_id] = {"id": node_id,
-                                           "name": node_id,
-                                           "x": 0,
-                                           "y": 0,
-                                           "shape": 2,
-                                           "fillColor": {
-                                               'r': 255,
-                                               'g': 255,
-                                               'b': 255,
-                                               'a': 255
-                                           },
-                                           'strokeColor': {
-                                               'r': 0,
-                                               'g': 0,
-                                               'b': 0,
-                                               'a': 255
-                                           },
-                                           "strokeWidth": 2,
-                                           "nodeWidth": 30,
-                                           "nodeHeight": 30}
-
-                for link in self.graph_attributes.skeleton(graph).getGraph().edges:
-                    link_data = {"id": "G" + str(graph.index()) + "E" + str(link.index()),
-                                 "label": "",
-                                 "source": "G" + str(graph.index()) + "N" + str(link.source().index()),
-                                 "target": "G" + str(graph.index()) + "N" + str(link.target().index()),
-                                 "t_shape": 2,
-                                 'strokeColor': {
-                                     'r': 0,
-                                     'g': 0,
-                                     'b': 0,
-                                     'a': 255
-                                 },
-                                 "strokeWidth": 1,
-                                 "sx": 0,
-                                 "sy": 0,
-                                 "tx": 0,
-                                 "ty": 0,
-                                 "arrow": False,
-                                 "bends": [],
-                                 "label_x": 0,
-                                 "label_y": 0}
-
-                    twin_link = skeleton.twinEdge(link)
-                    try:
-                        # todo find way to check if twin_link is a null pointer (is not None does not work)
-                        print(twin_link)
-
-                        sourceId = "G" + str(graph.index()) + "E" + str(link.index())
-                        targetId = "G" + str(skeleton.twinTreeNode(link).index()) + "E" + str(twin_link.index())
-                        duplicate_vlink = False
-
-                        for virtualLink in virtual_links:
-                            if virtualLink["sourceId"] == targetId and virtualLink["targetId"] == sourceId:
-                                duplicate_vlink = True
-
-                        if not duplicate_vlink:
-                            virtual_links.append({"id": sourceId + targetId,
-                                                  "sourceId": sourceId,
-                                                  "targetId": targetId})
-
-                        source_id_1 = "G" + str(graph.index()) + "N" + str(link.source().index())
-                        target_id_1 = "G" + str(skeleton.twinTreeNode(link).index()) + "N" + str(
-                            twin_link.source().index())
-
-                        twin_link_connector_1 = get_link_stabilizer(source_id_1, target_id_1)
-
-                        source_id_2 = "G" + str(graph.index()) + "N" + str(link.target().index())
-                        target_id_2 = "G" + str(skeleton.twinTreeNode(link).index()) + "N" + str(
-                            twin_link.target().index())
-
-                        twin_link_connector_2 = get_link_stabilizer(source_id_2, target_id_2)
-
-                        links_data[twin_link_connector_1['id']] = twin_link_connector_1
-                        links_data[twin_link_connector_2['id']] = twin_link_connector_2
-
-                    except ReferenceError:
-                        pass
-
-                    links_data[link_data['id']] = link_data
-
-            self.send({'code': 'initGraph', 'nodes': nodes_data, 'links': links_data, 'clusters': {},
-                       'rootClusterId': '-1', 'SPQRtree': True, 'virtualLinks': virtual_links})
+            self.export_spqr_tree()
             return
+
+        nodes_data = {}
+        links_data = {}
 
         for node in self.graph_attributes.constGraph().nodes:
             node_data = self.node_to_dict(node)
