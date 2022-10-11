@@ -129,7 +129,10 @@ class Widget(widgets.DOMWidget):
 
     def handle_msg(self, *args):
         msg = args[1]
-        if msg['code'] == 'linkClicked':
+        if self.is_SPQR_tree and 'Clicked' in msg['code']:
+            print("Click callbacks are disabled for SPQR-Trees.")
+            return
+        elif msg['code'] == 'linkClicked':
             if self.on_link_click_callback is not None:
                 self.on_link_click_callback(self.get_link_from_id(msg['id']), msg['altKey'], msg['ctrlKey'])
         elif msg['code'] == 'nodeClicked':
