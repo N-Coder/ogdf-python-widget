@@ -463,8 +463,10 @@ let WidgetView = widgets.DOMWidgetView.extend({
             this.removeAllClusterMovers()
         } else if (msg.code === 'downloadSvg') {
             this.downloadSvg(msg.fileName)
+        } else if (msg.code === 'exportSPQR') {
+            this.exportSPQRTree(msg.fileName)
         } else if (msg.code === 'test') {
-            this.moveCluster('2')
+            console.log("test")
         } else {
             console.log("msg cannot be read: " + msg)
         }
@@ -484,6 +486,20 @@ let WidgetView = widgets.DOMWidgetView.extend({
         downloadLink.href = svgUrl;
         downloadLink.download = fileName + ".svg";
         downloadLink.click();
+    },
+
+    exportSPQRTree: function (fileName) {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
+            'nodes': this.nodes,
+            'links': this.links,
+            'virtualLinks': this.virtualLinks
+        }));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", fileName + ".json");
+        document.body.appendChild(downloadAnchorNode); // required for firefox
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
     },
 
     moveCluster: function (clusterId) {

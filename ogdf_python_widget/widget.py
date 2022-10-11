@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 import cppyy
@@ -97,7 +98,7 @@ class Widget(widgets.DOMWidget):
         self.graph_attributes = graph_attributes
         self.on_msg(self.handle_msg)
         cppyy.include("ogdf/decomposition/DynamicSPQRTree.h")
-        self.is_SPQR_tree = isinstance(self.graph_attributes, cppyy.gbl.ogdf.DynamicSPQRTree)
+        self.is_SPQR_tree = isinstance(self.graph_attributes, cppyy.gbl.ogdf.DynamicSPQRTree) or self.graph_attributes is None
         self.widget_ready = False
         if isinstance(self.graph_attributes, cppyy.gbl.ogdf.ClusterGraphAttributes):
             self.myClusterObserver = MyClusterGraphObserver(self.graph_attributes.constClusterGraph(), self)
@@ -109,10 +110,13 @@ class Widget(widgets.DOMWidget):
 
     def set_graph_attributes(self, graph_attributes):
         self.graph_attributes = graph_attributes
+        self.is_SPQR_tree = isinstance(self.graph_attributes, cppyy.gbl.ogdf.DynamicSPQRTree)
         self.export_graph()
         self.myObserver = MyGraphObserver(self.graph_attributes.constGraph(), self)
         if isinstance(self.graph_attributes, cppyy.gbl.ogdf.ClusterGraphAttributes):
             self.myClusterObserver = MyClusterGraphObserver(self.graph_attributes.constClusterGraph(), self)
+        elif self.is_SPQR_tree:
+            self.myObserver = MyGraphObserver(self.graph_attributes.constGraph(), self)
         self.stop_force_directed()
 
     def update_graph_attributes(self, graph_attributes):
@@ -271,10 +275,23 @@ class Widget(widgets.DOMWidget):
 
     def download_svg(self, file_name=None):
         if file_name is None:
-            now = datetime.now()
-            file_name = now.strftime("%d/%m/%Y %H:%M:%S")
+            file_name = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
         self.send({"code": "downloadSvg", "fileName": file_name})
+
+    def export_spqr(self, file_name=None):
+        if file_name is None:
+            file_name = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
+        self.send({"code": "exportSPQR", "fileName": file_name})
+
+    def import_spqr(self, path):
+        file = open(path)
+        data = json.load(file)
+        self.is_SPQR_tree = True
+        self.graph_attributes = None
+        self.send({'code': 'initGraph', 'nodes': data['nodes'], 'links': data['links'], 'clusters': {},
+                   'rootClusterId': '-1', 'SPQRtree': True, 'virtualLinks': data['virtualLinks']})
 
     def svgCoords_to_graphCoords(self, svg_x, svg_y):
         g_x = svg_x / self.zoom - self.x_pos / self.zoom
@@ -440,6 +457,9 @@ class Widget(widgets.DOMWidget):
         return
 
     def export_graph(self):
+        if self.graph_attributes is None:
+            return
+
         if self.is_SPQR_tree:
             self.export_spqr_tree()
             return
