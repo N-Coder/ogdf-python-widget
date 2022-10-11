@@ -1,4 +1,5 @@
 import json
+import random
 from datetime import datetime
 
 import cppyy
@@ -11,6 +12,7 @@ from ogdf_python_widget.pythonize import color_to_dict
 
 def get_link_stabilizer(source_id, target_id):
     twin_link_connector = {"id": source_id + target_id,
+                           "virtualLink": True,
                            "label": "",
                            "source": source_id,
                            "target": target_id,
@@ -98,7 +100,8 @@ class Widget(widgets.DOMWidget):
         self.graph_attributes = graph_attributes
         self.on_msg(self.handle_msg)
         cppyy.include("ogdf/decomposition/DynamicSPQRTree.h")
-        self.is_SPQR_tree = isinstance(self.graph_attributes, cppyy.gbl.ogdf.DynamicSPQRTree) or self.graph_attributes is None
+        self.is_SPQR_tree = isinstance(self.graph_attributes,
+                                       cppyy.gbl.ogdf.DynamicSPQRTree) or self.graph_attributes is None
         self.widget_ready = False
         if isinstance(self.graph_attributes, cppyy.gbl.ogdf.ClusterGraphAttributes):
             self.myClusterObserver = MyClusterGraphObserver(self.graph_attributes.constClusterGraph(), self)
@@ -181,7 +184,7 @@ class Widget(widgets.DOMWidget):
                 self.move_node_to(n, node['x'], node['y'])
 
     @wait_for_frontend
-    def start_force_directed(self, charge_force=-100, force_center_x=None, force_center_y=None,
+    def start_force_directed(self, charge_force=-300, force_center_x=None, force_center_y=None,
                              fix_start_position=False):
         if not self.is_SPQR_tree:
             for link in self.graph_attributes.constGraph().edges:
@@ -375,6 +378,15 @@ class Widget(widgets.DOMWidget):
 
         for graph in self.graph_attributes.tree().nodes:
             skeleton = self.graph_attributes.skeleton(graph)
+            node_type = self.graph_attributes.typeOf(graph)
+
+            if node_type == 0:
+                fill_color = {'r': 230, 'g': 0, 'b': 0, 'a': 255}
+            elif node_type == 1:
+                fill_color = {'r': 230, 'g': 230, 'b': 0, 'a': 255}
+            else:
+                fill_color = {'r': 0, 'g': random.randint(100, 255), 'b': random.randint(100, 255), 'a': 255}
+
             for node in skeleton.getGraph().nodes:
                 node_id = "G" + str(graph.index()) + "N" + str(node.index())
                 nodes_data[node_id] = {"id": node_id,
@@ -382,12 +394,7 @@ class Widget(widgets.DOMWidget):
                                        "x": 0,
                                        "y": 0,
                                        "shape": 2,
-                                       "fillColor": {
-                                           'r': 255,
-                                           'g': 255,
-                                           'b': 255,
-                                           'a': 255
-                                       },
+                                       "fillColor": fill_color,
                                        'strokeColor': {
                                            'r': 0,
                                            'g': 0,
@@ -462,6 +469,7 @@ class Widget(widgets.DOMWidget):
 
         if self.is_SPQR_tree:
             self.export_spqr_tree()
+            self.start_force_directed()
             return
 
         nodes_data = {}

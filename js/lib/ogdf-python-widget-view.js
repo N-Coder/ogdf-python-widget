@@ -175,18 +175,28 @@ let WidgetView = widgets.DOMWidgetView.extend({
         let link_force = d3.forceLink(linksData.concat(invisibleLinks)).id(function (d) {
             return d.id;
         }).strength(function (link) {
-            if (link.strongerLink) {
-                return 0.6;
-            } else {
-                if (link.source.clusterId === link.target.clusterId)
-                    return 0.2;
-                else
-                    return 0.1;
+            if (widgetView.isSPQRTree) {
+                if (link.virtualLink) {
+                    return 0.15
+                }
             }
+
+            if (widgetView.isClusterGraph) {
+                if (link.strongerLink) {
+                    return 0.6;
+                } else {
+                    if (link.source.clusterId === link.target.clusterId)
+                        return 0.2;
+                    else
+                        return 0.1;
+                }
+            }
+
+            return 0.2
         })
 
         let charge_force = d3.forceManyBody().strength(function (d) {
-            if (d.id < 0)
+            if (widgetView.isClusterGraph && d.id < 0)
                 return forceConfig.chargeForce * 10
 
             return forceConfig.chargeForce
@@ -1459,6 +1469,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             .data([vLinkData])
             .enter()
             .append("line")
+            .style("stroke-dasharray", ("3, 3"))
             .attr("x1", function (d) {
                 let sourceLink = widgetView.links[d.sourceId]
                 return (sourceLink.sx + sourceLink.tx) / 2
@@ -1475,7 +1486,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 let targetLink = widgetView.links[d.targetId]
                 return (targetLink.sy + targetLink.ty) / 2
             })
-            .attr("stroke", "black")
+            .attr("stroke", "gray")
             .attr("stroke-width", 1)
             .attr("fill", "none")
             .attr("class", "virtualLink");
@@ -1746,6 +1757,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             .selectAll(".lineText")
 
         for (let i = 0; i < linksData.length; i++) {
+            if(widgetView.isSPQRTree && linksData[i].virtualLink) continue
             widgetView.constructLink(linksData[i], this.line_holder, this.line_text_holder, this.line_click_holder, widgetView, this.clickThickness, false)
         }
 
