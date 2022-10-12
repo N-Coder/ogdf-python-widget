@@ -979,10 +979,16 @@ let WidgetView = widgets.DOMWidgetView.extend({
         nl.text(function (d) {
             if (d.name !== node.name) {
                 d.name = node.name
+                d.labelWidth = 0
             } else {
                 textChanged = false
             }
             return d.name;
+        }).style("font-size", function (d) {
+            if(textChanged)
+                return 1 + 'em'
+
+            return d.fontSize + 'em'
         })
 
         if (textChanged) {
@@ -1757,7 +1763,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             .selectAll(".lineText")
 
         for (let i = 0; i < linksData.length; i++) {
-            if(widgetView.isSPQRTree && linksData[i].virtualLink) continue
+            if (widgetView.isSPQRTree && linksData[i].virtualLink) continue
             widgetView.constructLink(linksData[i], this.line_holder, this.line_text_holder, this.line_click_holder, widgetView, this.clickThickness, false)
         }
 
@@ -1967,29 +1973,19 @@ let WidgetView = widgets.DOMWidgetView.extend({
     },
 
     adaptLabelFontSize(d) {
-        let xPadding, diameter, labelAvailableWidth, labelWidth;
+        let labelAvailableWidth = d.nodeWidth - 2;
 
-        xPadding = 2;
-        diameter = d.nodeWidth;
-        labelAvailableWidth = diameter - xPadding;
-
-        labelWidth = this.getComputedTextLength();
+        if (typeof d.labelWidth === 'undefined' || d.labelWidth === 0)
+            d.labelWidth = this.getComputedTextLength();
 
         // There is enough space for the label so leave it as is.
-        if (labelWidth <= labelAvailableWidth) {
+        if (d.labelWidth <= labelAvailableWidth) {
+            d.fontSize = 1
             return '1em';
+        } else {
+            d.fontSize = (labelAvailableWidth / d.labelWidth - 0.01)
+            return  d.fontSize + 'em';
         }
-
-        /*
-         * The meaning of the ratio between labelAvailableWidth and labelWidth equaling 1 is that
-         * the label is taking up exactly its available space.
-         * With the result as `1em` the font remains the same.
-         *
-         * The meaning of the ratio between labelAvailableWidth and labelWidth equaling 0.5 is that
-         * the label is taking up twice its available space.
-         * With the result as `0.5em` the font will change to half its original size.
-         */
-        return (labelAvailableWidth / labelWidth - 0.01) + 'em';
     },
 
     getPathForLine(sx, sy, bends, tx, ty, shape, sId, tId) {
