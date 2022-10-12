@@ -1,4 +1,4 @@
-ogdf-python-widget 0.1.0a0
+ogdf-python-widget 0.1.0
 ==========================
 
 A Custom Jupyter Widget Library
