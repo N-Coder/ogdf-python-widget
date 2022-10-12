@@ -56,6 +56,34 @@ path = "js"
 build_cmd = "build:prod"
 npm = ["yarn"]
 
+
+[[tool.tbump.field]]
+name = "channel"
+default = ""
+
+[[tool.tbump.field]]
+name = "release"
+default = ""
+
+[[tool.tbump.file]]
+src = "README.md"
+
+[[tool.tbump.file]]
+src = "ogdf_python_widget/_version.py"
+
+[[tool.tbump.file]]
+src = "js/package.json"
+search = '"version": "{current_version}"'
+
+[tool.tbump.version]
+current = "0.1.0a0"
+regex = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)((?P<channel>a|b|rc|.dev)(?P<release>\\d+))?"
+
+[tool.tbump.git]
+message_template = "Bump to {new_version}"
+tag_template = "v{new_version}"
+
+
 [build-system]
 requires = [
     "hatchling>=1.10.0",
