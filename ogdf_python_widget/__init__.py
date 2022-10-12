@@ -1,4 +1,4 @@
-from ogdf_python_widget._version import version_info, __version__
+from ogdf_python_widget._version import __version__
 
 
 def _auto_enable():
