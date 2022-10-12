@@ -1,3 +1,5 @@
+import json
+import random
 from datetime import datetime
 
 import cppyy
@@ -6,6 +8,42 @@ from traitlets import Unicode, Dict, Integer, Float, Bool
 
 # See js/lib/ogdf-python-widget-view.js for the frontend counterpart to this file.
 from ogdf_python_widget.pythonize import color_to_dict
+
+
+def get_link_stabilizer(source_id, target_id):
+    twin_link_connector = {"id": source_id + target_id,
+                           "virtualLink": True,
+                           "label": "",
+                           "source": source_id,
+                           "target": target_id,
+                           "t_shape": 2,
+                           'strokeColor': {
+                               'r': 100,
+                               'g': 0,
+                               'b': 0,
+                               'a': 0
+                           },
+                           "strokeWidth": 1,
+                           "sx": 0,
+                           "sy": 0,
+                           "tx": 0,
+                           "ty": 0,
+                           "arrow": False,
+                           "bends": [],
+                           "label_x": 0,
+                           "label_y": 0}
+    return twin_link_connector
+
+
+def wait_for_frontend(func):
+    def my_wrap(self, *args, **kwargs):
+        if self.widget_ready:
+            return func(self, *args, **kwargs)
+        else:
+            print("Try again the widget isn't ready yet.")
+            return
+
+    return my_wrap
 
 
 @widgets.register
@@ -61,19 +99,27 @@ class Widget(widgets.DOMWidget):
         super().__init__()
         self.graph_attributes = graph_attributes
         self.on_msg(self.handle_msg)
+        cppyy.include("ogdf/decomposition/DynamicSPQRTree.h")
+        self.is_SPQR_tree = isinstance(self.graph_attributes,
+                                       cppyy.gbl.ogdf.DynamicSPQRTree) or self.graph_attributes is None
+        self.widget_ready = False
         if isinstance(self.graph_attributes, cppyy.gbl.ogdf.ClusterGraphAttributes):
             self.myClusterObserver = MyClusterGraphObserver(self.graph_attributes.constClusterGraph(), self)
 
-        self.myObserver = MyGraphObserver(self.graph_attributes.constGraph(), self)
+        if not self.is_SPQR_tree:
+            self.myObserver = MyGraphObserver(self.graph_attributes.constGraph(), self)
 
         self.debug = debug
 
     def set_graph_attributes(self, graph_attributes):
         self.graph_attributes = graph_attributes
+        self.is_SPQR_tree = isinstance(self.graph_attributes, cppyy.gbl.ogdf.DynamicSPQRTree)
         self.export_graph()
         self.myObserver = MyGraphObserver(self.graph_attributes.constGraph(), self)
         if isinstance(self.graph_attributes, cppyy.gbl.ogdf.ClusterGraphAttributes):
             self.myClusterObserver = MyClusterGraphObserver(self.graph_attributes.constClusterGraph(), self)
+        elif self.is_SPQR_tree:
+            self.myObserver = MyGraphObserver(self.graph_attributes.constGraph(), self)
         self.stop_force_directed()
 
     def update_graph_attributes(self, graph_attributes):
@@ -89,7 +135,10 @@ class Widget(widgets.DOMWidget):
 
     def handle_msg(self, *args):
         msg = args[1]
-        if msg['code'] == 'linkClicked':
+        if self.is_SPQR_tree and 'Clicked' in msg['code']:
+            print("Click callbacks are disabled for SPQR-Trees.")
+            return
+        elif msg['code'] == 'linkClicked':
             if self.on_link_click_callback is not None:
                 self.on_link_click_callback(self.get_link_from_id(msg['id']), msg['altKey'], msg['ctrlKey'])
         elif msg['code'] == 'nodeClicked':
@@ -116,6 +165,7 @@ class Widget(widgets.DOMWidget):
             if self.on_cluster_click_callback is not None:
                 self.on_cluster_click_callback(self.get_cluster_from_id(msg['id']), msg['altKey'], msg['ctrlKey'])
         elif msg['code'] == 'widgetReady':
+            self.widget_ready = True
             self.export_graph()
         elif msg['code'] == 'positionUpdate':
             self.position_update(msg['nodes'].values())
@@ -133,10 +183,12 @@ class Widget(widgets.DOMWidget):
             if n is not None:
                 self.move_node_to(n, node['x'], node['y'])
 
-    def start_force_directed(self, charge_force=-100, force_center_x=None, force_center_y=None,
+    @wait_for_frontend
+    def start_force_directed(self, charge_force=-300, force_center_x=None, force_center_y=None,
                              fix_start_position=False):
-        for link in self.graph_attributes.constGraph().edges:
-            self.graph_attributes.bends(link).clear()
+        if not self.is_SPQR_tree:
+            for link in self.graph_attributes.constGraph().edges:
+                self.graph_attributes.bends(link).clear()
 
         if force_center_x is None or force_center_y is None:
             center_coords = self.svgCoords_to_graphCoords(self.width / 2, self.height / 2)
@@ -149,9 +201,11 @@ class Widget(widgets.DOMWidget):
                              "fixStartPosition": fix_start_position,
                              "stop": False}
 
+    @wait_for_frontend
     def stop_force_directed(self):
         self.force_config = {"stop": True}
-        self.refresh_graph()
+        if not self.is_SPQR_tree:
+            self.refresh_graph()
 
     def get_node_from_id(self, node_id):
         for node in self.graph_attributes.constGraph().nodes:
@@ -224,10 +278,23 @@ class Widget(widgets.DOMWidget):
 
     def download_svg(self, file_name=None):
         if file_name is None:
-            now = datetime.now()
-            file_name = now.strftime("%d/%m/%Y %H:%M:%S")
+            file_name = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
         self.send({"code": "downloadSvg", "fileName": file_name})
+
+    def export_spqr(self, file_name=None):
+        if file_name is None:
+            file_name = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
+        self.send({"code": "exportSPQR", "fileName": file_name})
+
+    def import_spqr(self, path):
+        file = open(path)
+        data = json.load(file)
+        self.is_SPQR_tree = True
+        self.graph_attributes = None
+        self.send({'code': 'initGraph', 'nodes': data['nodes'], 'links': data['links'], 'clusters': {},
+                   'rootClusterId': '-1', 'SPQRtree': True, 'virtualLinks': data['virtualLinks']})
 
     def svgCoords_to_graphCoords(self, svg_x, svg_y):
         g_x = svg_x / self.zoom - self.x_pos / self.zoom
@@ -304,15 +371,117 @@ class Widget(widgets.DOMWidget):
                 "children": children_data,
                 "nodes": nodes}
 
-    def export_graph(self):
+    def export_spqr_tree(self):
         nodes_data = {}
+        links_data = {}
+        virtual_links = []
+
+        for graph in self.graph_attributes.tree().nodes:
+            skeleton = self.graph_attributes.skeleton(graph)
+            node_type = self.graph_attributes.typeOf(graph)
+
+            if node_type == 0:
+                fill_color = {'r': 230, 'g': 0, 'b': 0, 'a': 255}
+            elif node_type == 1:
+                fill_color = {'r': 230, 'g': 230, 'b': 0, 'a': 255}
+            else:
+                fill_color = {'r': 0, 'g': random.randint(100, 255), 'b': random.randint(100, 255), 'a': 255}
+
+            for node in skeleton.getGraph().nodes:
+                node_id = "G" + str(graph.index()) + "N" + str(node.index())
+                nodes_data[node_id] = {"id": node_id,
+                                       "name": node_id,
+                                       "x": 0,
+                                       "y": 0,
+                                       "shape": 2,
+                                       "fillColor": fill_color,
+                                       'strokeColor': {
+                                           'r': 0,
+                                           'g': 0,
+                                           'b': 0,
+                                           'a': 255
+                                       },
+                                       "strokeWidth": 2,
+                                       "nodeWidth": 30,
+                                       "nodeHeight": 30}
+
+            for link in self.graph_attributes.skeleton(graph).getGraph().edges:
+                link_data = {"id": "G" + str(graph.index()) + "E" + str(link.index()),
+                             "label": "",
+                             "source": "G" + str(graph.index()) + "N" + str(link.source().index()),
+                             "target": "G" + str(graph.index()) + "N" + str(link.target().index()),
+                             "t_shape": 2,
+                             'strokeColor': {
+                                 'r': 0,
+                                 'g': 0,
+                                 'b': 0,
+                                 'a': 255
+                             },
+                             "strokeWidth": 1,
+                             "sx": 0,
+                             "sy": 0,
+                             "tx": 0,
+                             "ty": 0,
+                             "arrow": False,
+                             "bends": [],
+                             "label_x": 0,
+                             "label_y": 0}
+
+                twin_link = skeleton.twinEdge(link)
+                if bool(twin_link):
+                    sourceId = "G" + str(graph.index()) + "E" + str(link.index())
+                    targetId = "G" + str(skeleton.twinTreeNode(link).index()) + "E" + str(twin_link.index())
+                    duplicate_vlink = False
+
+                    for virtualLink in virtual_links:
+                        if virtualLink["sourceId"] == targetId and virtualLink["targetId"] == sourceId:
+                            duplicate_vlink = True
+
+                    if not duplicate_vlink:
+                        virtual_links.append({"id": sourceId + targetId,
+                                              "sourceId": sourceId,
+                                              "targetId": targetId})
+
+                    source_id_1 = "G" + str(graph.index()) + "N" + str(link.source().index())
+                    target_id_1 = "G" + str(skeleton.twinTreeNode(link).index()) + "N" + str(
+                        twin_link.source().index())
+
+                    twin_link_connector_1 = get_link_stabilizer(source_id_1, target_id_1)
+
+                    source_id_2 = "G" + str(graph.index()) + "N" + str(link.target().index())
+                    target_id_2 = "G" + str(skeleton.twinTreeNode(link).index()) + "N" + str(
+                        twin_link.target().index())
+
+                    twin_link_connector_2 = get_link_stabilizer(source_id_2, target_id_2)
+
+                    links_data[twin_link_connector_1['id']] = twin_link_connector_1
+                    links_data[twin_link_connector_2['id']] = twin_link_connector_2
+
+                links_data[link_data['id']] = link_data
+
+        self.send({'code': 'initGraph', 'nodes': nodes_data, 'links': links_data, 'clusters': {},
+                   'rootClusterId': '-1', 'SPQRtree': True, 'virtualLinks': virtual_links})
+        return
+
+    def export_graph(self):
+        if self.graph_attributes is None:
+            return
+
+        if self.is_SPQR_tree:
+            self.export_spqr_tree()
+            self.start_force_directed()
+            return
+
+        nodes_data = {}
+        links_data = {}
+
         for node in self.graph_attributes.constGraph().nodes:
             node_data = self.node_to_dict(node)
             nodes_data[node_data["id"]] = node_data
 
-        links_data = []
         for link in self.graph_attributes.constGraph().edges:
-            links_data.append(self.link_to_dict(link))
+            link_data = self.link_to_dict(link)
+            links_data[link_data['id']] = link_data
 
         cluster_data = {}
         root_cluster_id = '-1'
