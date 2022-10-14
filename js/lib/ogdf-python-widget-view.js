@@ -1795,7 +1795,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
         //make sure that the orientation is correct.
         let xDiff = tx - sx
         let yDiff = ty - sy
-        let theta = Math.atan(yDiff / xDiff)
+        let theta = Math.atan(yDiff / (xDiff + 0.1))
         let aSign = (xDiff < 0 ? -1 : 1)
 
         //find offsets
