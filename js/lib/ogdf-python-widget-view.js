@@ -361,26 +361,26 @@ let WidgetView = widgets.DOMWidgetView.extend({
                     d.sy = d.source.y
                     d.tx = d.target.x
                     d.ty = d.target.y
-                    return widgetView.getPathForLine(d.source.x, d.source.y, [], d.target.x, d.target.y, d.t_shape, d.source.id, d.target.id);
+                    return widgetView.getPathForLine(d.source.x, d.source.y, [], d.target.x, d.target.y, d.t_shape, d.source.id, d.target.id, d);
                 });
 
             d3.select(widgetView.svg)
                 .selectAll(".virtualLink")
                 .attr("x1", function (d) {
                     let sourceLink = widgetView.links[d.sourceId]
-                    return (sourceLink.sx + sourceLink.tx) / 2
+                    return sourceLink.curveX === undefined ? (sourceLink.sx + sourceLink.tx) / 2 : sourceLink.curveX
                 })
                 .attr("y1", function (d) {
                     let sourceLink = widgetView.links[d.sourceId]
-                    return (sourceLink.sy + sourceLink.ty) / 2
+                    return sourceLink.curveY === undefined ? (sourceLink.sy + sourceLink.ty) / 2 : sourceLink.curveY
                 })
                 .attr("x2", function (d) {
                     let targetLink = widgetView.links[d.targetId]
-                    return (targetLink.sx + targetLink.tx) / 2
+                    return targetLink.curveX === undefined ? (targetLink.sx + targetLink.tx) / 2 : targetLink.curveX
                 })
                 .attr("y2", function (d) {
                     let targetLink = widgetView.links[d.targetId]
-                    return (targetLink.sy + targetLink.ty) / 2
+                    return targetLink.curveY === undefined ? (targetLink.sy + targetLink.ty) / 2 : targetLink.curveY
                 })
 
 
@@ -695,7 +695,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 .attr("d", function (d) {
                     d.bends[bendIndex][0] = event.x
                     d.bends[bendIndex][1] = event.y
-                    return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
+                    return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target, d);
                 })
 
             if (bendIndex === 0) {
@@ -1090,7 +1090,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 d.tx = newLink.tx
                 d.ty = newLink.ty
 
-                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
+                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target, d);
             })
             .attr("stroke", function (d) {
                 d.strokeColor = link.strokeColor
@@ -1112,7 +1112,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 d.tx = link.tx
                 d.ty = link.ty
 
-                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
+                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target, d);
             })
             .attr("stroke-width", function (d) {
                 d.strokeWidth = link.strokeWidth
@@ -1279,7 +1279,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                     labelsToMoveIds.push(d.id)
                 }
 
-                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
+                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target, d);
             })
 
         //move link-label
@@ -1306,19 +1306,19 @@ let WidgetView = widgets.DOMWidgetView.extend({
                     })
                     .attr("x1", function (d) {
                         let sourceLink = widgetView.links[d.sourceId]
-                        return (sourceLink.sx + sourceLink.tx) / 2
+                        return sourceLink.curveX === undefined ? (sourceLink.sx + sourceLink.tx) / 2 : sourceLink.curveX
                     })
                     .attr("y1", function (d) {
                         let sourceLink = widgetView.links[d.sourceId]
-                        return (sourceLink.sy + sourceLink.ty) / 2
+                        return sourceLink.curveY === undefined ? (sourceLink.sy + sourceLink.ty) / 2 : sourceLink.curveY
                     })
                     .attr("x2", function (d) {
                         let targetLink = widgetView.links[d.targetId]
-                        return (targetLink.sx + targetLink.tx) / 2
+                        return targetLink.curveX === undefined ? (targetLink.sx + targetLink.tx) / 2 : targetLink.curveX
                     })
                     .attr("y2", function (d) {
                         let targetLink = widgetView.links[d.targetId]
-                        return (targetLink.sy + targetLink.ty) / 2
+                        return targetLink.curveY === undefined ? (targetLink.sy + targetLink.ty) / 2 : targetLink.curveY
                     })
             }
         }
@@ -1733,10 +1733,32 @@ let WidgetView = widgets.DOMWidgetView.extend({
         }
     },
 
-    getPathForLine(sx, sy, bends, tx, ty, shape, sId, tId) {
+    getPathForLine(sx, sy, bends, tx, ty, shape, sId, tId, link) {
         //self loop
         if (sId === tId && bends.length === 0) {
             return this.getSelfLoopPath(sx, sy, tx, ty)
+        }
+
+        let M = 20
+
+        //spread out parallel edges of P-nodes
+        if (this.isSPQRTree && link.isPnode && link.isVlinkAttached) {
+            let linkToLookAt
+            for (let i = 0; i < this.virtualLinks.length; i++) {
+                if (this.virtualLinks[i].sourceId === link.id)
+                    linkToLookAt = this.links[this.virtualLinks[i].targetId]
+
+                if (this.virtualLinks[i].targetId === link.id)
+                    linkToLookAt = this.links[this.virtualLinks[i].sourceId]
+            }
+
+            let middleOfOtherX = (linkToLookAt.sx + linkToLookAt.tx) / 2
+            let myMiddleX = (sx + tx) / 2
+
+            if (middleOfOtherX < myMiddleX)
+                M = M * -1
+
+            return this.draw_curve(sx, sy, tx, ty, M, link)
         }
 
         const line = d3.line()
@@ -1763,6 +1785,34 @@ let WidgetView = widgets.DOMWidgetView.extend({
 
         points = points.concat([[tx, ty]])
         return line(points)
+    },
+
+    draw_curve(sx, sy, tx, ty, scale, link) {
+        //get point in the middle
+        let middleX = (tx + sx) / 2
+        let middleY = (ty + sy) / 2
+
+        //make sure that the orientation is correct.
+        let xDiff = tx - sx
+        let yDiff = ty - sy
+        let theta = Math.atan(yDiff / xDiff)
+        let aSign = (xDiff < 0 ? -1 : 1)
+
+        //find offsets
+        let offsetX = scale * aSign * Math.sin(theta)
+        let offsetY = scale * aSign * Math.cos(theta)
+
+        //calculate control point used for path
+        let controlPointX = middleX - offsetX
+        let controlPointY = middleY + offsetY
+
+        //save point where middle of path will actually be drawn
+        link.curveX = middleX - offsetX * 0.5
+        link.curveY = middleY + offsetY * 0.5
+
+        return "M" + sx + "," + sy +
+            "Q" + controlPointX + "," + controlPointY +
+            " " + tx + "," + ty
     },
 
     /**

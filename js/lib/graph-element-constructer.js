@@ -113,7 +113,7 @@ export function constructLink(linkData, line_holder, line_text_holder, line_clic
             }
         })
         .attr("d", function (d) {
-            return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
+            return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target, d);
         })
         .attr("stroke", function (d) {
             return widgetView.getColorStringFromJson(d.strokeColor)
@@ -156,7 +156,7 @@ export function constructLink(linkData, line_holder, line_text_holder, line_clic
             return d.id
         })
         .attr("d", function (d) {
-            return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
+            return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target, d);
         })
         .attr("stroke", "transparent")
         .attr("stroke-width", function (d) {
@@ -208,7 +208,7 @@ export function constructForceLink(linkData, line_holder, widgetView, basic) {
             }
         })
         .attr("d", function (d) {
-            return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
+            return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target, d);
         })
         .attr("stroke", function (d) {
             return widgetView.getColorStringFromJson(d.strokeColor)
@@ -236,19 +236,19 @@ export function constructVirtualLink(vLinkData, line_holder, widgetView) {
         .style("stroke-dasharray", ("3, 3"))
         .attr("x1", function (d) {
             let sourceLink = widgetView.links[d.sourceId]
-            return (sourceLink.sx + sourceLink.tx) / 2
+            return sourceLink.curveX === undefined ? (sourceLink.sx + sourceLink.tx) / 2 : sourceLink.curveX
         })
         .attr("y1", function (d) {
             let sourceLink = widgetView.links[d.sourceId]
-            return (sourceLink.sy + sourceLink.ty) / 2
+            return sourceLink.curveY === undefined ? (sourceLink.sy + sourceLink.ty) / 2 : sourceLink.curveY
         })
         .attr("x2", function (d) {
             let targetLink = widgetView.links[d.targetId]
-            return (targetLink.sx + targetLink.tx) / 2
+            return targetLink.curveX === undefined ? (targetLink.sx + targetLink.tx) / 2 : targetLink.curveX
         })
         .attr("y2", function (d) {
             let targetLink = widgetView.links[d.targetId]
-            return (targetLink.sy + targetLink.ty) / 2
+            return targetLink.curveY === undefined ? (targetLink.sy + targetLink.ty) / 2 : targetLink.curveY
         })
         .attr("stroke", "gray")
         .attr("stroke-width", 1)

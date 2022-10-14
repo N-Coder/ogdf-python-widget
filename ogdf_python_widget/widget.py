@@ -425,10 +425,12 @@ class Widget(widgets.DOMWidget):
                              "arrow": False,
                              "bends": [],
                              "label_x": 0,
-                             "label_y": 0}
+                             "label_y": 0,
+                             "isPnode": node_type == 1}
 
                 twin_link = skeleton.twinEdge(link)
                 if bool(twin_link):
+                    link_data["isVlinkAttached"] = True
                     sourceId = "G" + str(graph.index()) + "E" + str(link.index())
                     targetId = "G" + str(skeleton.twinTreeNode(link).index()) + "E" + str(twin_link.index())
                     duplicate_vlink = False
