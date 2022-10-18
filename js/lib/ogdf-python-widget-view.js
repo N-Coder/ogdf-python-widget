@@ -1,8 +1,8 @@
 let widgets = require('@jupyter-widgets/base');
 let _ = require('lodash');
 let d3 = require("d3");
+let c = require('./graph-element-constructer')
 require("./style.css");
-//import {constructLink} from "./graph-element-constructor.mjs";
 
 // See widget.py for the kernel counterpart to this file.
 
@@ -90,6 +90,118 @@ let WidgetView = widgets.DOMWidgetView.extend({
         this.send({"code": "widgetReady"})
     },
 
+    handle_msg: function (msg) {
+        if (msg.code === 'clearGraph') {
+            this.clearGraph()
+        } else if (msg.code === 'initGraph') {
+            this.links = msg.links
+            this.nodes = msg.nodes
+            this.clusters = msg.clusters
+            this.rootClusterId = msg.rootClusterId
+            this.isClusterGraph = this.rootClusterId !== '-1'
+            this.isSPQRTree = msg.SPQRtree
+            if (this.isSPQRTree)
+                this.virtualLinks = msg.virtualLinks
+            this.render()
+            this.forceConfigChanged()
+        } else if (msg.code === 'nodeAdded') {
+            this.addNode(msg.data)
+        } else if (msg.code === 'linkAdded') {
+            this.addLink(msg.data)
+        } else if (msg.code === 'addClusterById') {
+            this.addCluster(msg.data)
+            console.log(this.clusters)
+        } else if (msg.code === 'deleteNodeById') {
+            this.deleteNodeById(msg.data)
+        } else if (msg.code === 'deleteLinkById') {
+            this.deleteLinkById(msg.data)
+        } else if (msg.code === 'deleteClusterById') {
+            this.deleteClusterById(msg.data)
+            console.log(this.clusters)
+        } else if (msg.code === 'updateNode') {
+            this.updateNode(msg.data, msg.animated)
+        } else if (msg.code === 'updateLink') {
+            this.updateLink(msg.data, msg.animated)
+        } else if (msg.code === 'moveLink') {
+            this.moveLinkBends(msg.data)
+        } else if (msg.code === 'removeAllBendMovers') {
+            this.removeAllBendMovers()
+        } else if (msg.code === 'removeBendMoversFor') {
+            this.removeBendMoversForLink(msg.data)
+        } else if (msg.code === 'moveCluster') {
+            this.moveCluster(msg.data)
+        } else if (msg.code === 'removeAllClusterMovers') {
+            this.removeAllClusterMovers()
+        } else if (msg.code === 'downloadSvg') {
+            this.downloadSvg(msg.fileName)
+        } else if (msg.code === 'exportSPQR') {
+            this.exportSPQRTree(msg.fileName)
+        } else if (msg.code === 'test') {
+            console.log("test")
+        } else {
+            console.log("msg cannot be read: " + msg)
+        }
+    },
+
+    transformCallbackCheck: function () {
+        if (this.isTransformCallbackAllowed) {
+            this.readjustZoomLevel(
+                d3.zoomIdentity.translate(this.model.get('x_pos'), this.model.get('y_pos')).scale(this.model.get('zoom')))
+        }
+    },
+
+    svgSizeChanged: function () {
+        this.width = this.model.get('width')
+        this.height = this.model.get('height')
+
+        d3.select(this.svg)
+            .attr("width", this.model.get('width'))
+            .attr("height", this.model.get('height'))
+
+        if (this.model.get("rescale_on_resize")) this.readjustZoomLevel(this.getInitialTransform(15))
+    },
+
+    clickThicknessChanged: function () {
+        this.clickThickness = this.model.get("click_thickness")
+        let widgetView = this
+
+        d3.select(this.svg).selectAll(".line_click_holder > .line")
+            .attr("stroke-width", function (d) {
+                return Math.max(d.strokeWidth, widgetView.clickThickness)
+            })
+    },
+
+    animationDurationChanged: function () {
+        this.animationDuration = this.model.get("animation_duration")
+    },
+
+    gridSizeChanged: function () {
+        this.gridSize = this.model.get('grid_size');
+    },
+
+    forceConfigChanged: function () {
+        let forceConfig = this.model.get("force_config")
+
+        if (forceConfig.stop || forceConfig.stop == null) {
+            this.stopForceLayout()
+        } else {
+            this.startForceLayout(forceConfig)
+        }
+    },
+
+    nodeMovementChanged: function () {
+        this.isNodeMovementEnabled = this.model.get("node_movement_enabled")
+
+        if (!this.isNodeMovementEnabled) {
+            d3.select(this.svg).selectAll(".node").on('mousedown.drag', null)
+            d3.select(this.svg).selectAll(".nodeLabel").on('mousedown.drag', null)
+        } else {
+            d3.select(this.svg).selectAll(".node").call(this.node_drag_handler)
+            d3.select(this.svg).selectAll(".nodeLabel").call(this.node_drag_handler)
+        }
+    },
+
+
     startForceLayout: function (forceConfig) {
         let widgetView = this
 
@@ -155,12 +267,12 @@ let WidgetView = widgets.DOMWidgetView.extend({
 
         let linksData = Object.values(this.links)
         for (let i = 0; i < linksData.length; i++) {
-            this.constructForceLink(linksData[i], this.line_holder, this, false)
+            c.constructForceLink(linksData[i], this.line_holder, this, false)
         }
 
         let nodesData = Object.values(this.nodes)
         for (let i = 0; i < nodesData.length; i++) {
-            this.constructNode(nodesData[i], this.node_holder, this.text_holder, this, false)
+            c.constructNode(nodesData[i], this.node_holder, this.text_holder, this, false)
         }
 
         setTimeout(function () {
@@ -249,26 +361,26 @@ let WidgetView = widgets.DOMWidgetView.extend({
                     d.sy = d.source.y
                     d.tx = d.target.x
                     d.ty = d.target.y
-                    return widgetView.getPathForLine(d.source.x, d.source.y, [], d.target.x, d.target.y, d.t_shape, d.source.id, d.target.id);
+                    return widgetView.getPathForLine(d.source.x, d.source.y, [], d.target.x, d.target.y, d.t_shape, d.source.id, d.target.id, d);
                 });
 
             d3.select(widgetView.svg)
                 .selectAll(".virtualLink")
                 .attr("x1", function (d) {
                     let sourceLink = widgetView.links[d.sourceId]
-                    return (sourceLink.sx + sourceLink.tx) / 2
+                    return sourceLink.curveX === undefined ? (sourceLink.sx + sourceLink.tx) / 2 : sourceLink.curveX
                 })
                 .attr("y1", function (d) {
                     let sourceLink = widgetView.links[d.sourceId]
-                    return (sourceLink.sy + sourceLink.ty) / 2
+                    return sourceLink.curveY === undefined ? (sourceLink.sy + sourceLink.ty) / 2 : sourceLink.curveY
                 })
                 .attr("x2", function (d) {
                     let targetLink = widgetView.links[d.targetId]
-                    return (targetLink.sx + targetLink.tx) / 2
+                    return targetLink.curveX === undefined ? (targetLink.sx + targetLink.tx) / 2 : targetLink.curveX
                 })
                 .attr("y2", function (d) {
                     let targetLink = widgetView.links[d.targetId]
-                    return (targetLink.sy + targetLink.ty) / 2
+                    return targetLink.curveY === undefined ? (targetLink.sy + targetLink.ty) / 2 : targetLink.curveY
                 })
 
 
@@ -276,7 +388,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 widgetView.syncBackend()
                 widgetView.ticksSinceSync = 0
                 if (widgetView.isClusterGraph) {
-                    widgetView.constructClusters(widgetView.rootClusterId)
+                    c.constructClusters(widgetView.rootClusterId, widgetView)
                     widgetView.updateClustersInOGDF()
                 }
             }
@@ -300,65 +412,14 @@ let WidgetView = widgets.DOMWidgetView.extend({
             for (let i = 0; i < linksData.length; i++) {
                 linksData[i].source = linksData[i].source.id
                 linksData[i].target = linksData[i].target.id
-                this.constructLink(linksData[i], this.line_holder, this.line_text_holder, this.line_click_holder, this, this.clickThickness, false)
+                c.constructLink(linksData[i], this.line_holder, this.line_text_holder, this.line_click_holder, this, this.clickThickness, false)
             }
-        }
-    },
-
-    forceConfigChanged: function () {
-        let forceConfig = this.model.get("force_config")
-
-        if (forceConfig.stop || forceConfig.stop == null) {
-            this.stopForceLayout()
-        } else {
-            this.startForceLayout(forceConfig)
-        }
-    },
-
-    nodeMovementChanged: function () {
-        this.isNodeMovementEnabled = this.model.get("node_movement_enabled")
-
-        if (!this.isNodeMovementEnabled) {
-            d3.select(this.svg).selectAll(".node").on('mousedown.drag', null)
-            d3.select(this.svg).selectAll(".nodeLabel").on('mousedown.drag', null)
-        } else {
-            d3.select(this.svg).selectAll(".node").call(this.node_drag_handler)
-            d3.select(this.svg).selectAll(".nodeLabel").call(this.node_drag_handler)
         }
     },
 
     syncBackend: function () {
         if (!this.isSPQRTree)
             this.send({'code': 'positionUpdate', 'nodes': this.nodes})
-    },
-
-    animationDurationChanged: function () {
-        this.animationDuration = this.model.get("animation_duration")
-    },
-
-    gridSizeChanged: function () {
-        this.gridSize = this.model.get('grid_size');
-    },
-
-    clickThicknessChanged: function () {
-        this.clickThickness = this.model.get("click_thickness")
-        let widgetView = this
-
-        d3.select(this.svg).selectAll(".line_click_holder > .line")
-            .attr("stroke-width", function (d) {
-                return Math.max(d.strokeWidth, widgetView.clickThickness)
-            })
-    },
-
-    svgSizeChanged: function () {
-        this.width = this.model.get('width')
-        this.height = this.model.get('height')
-
-        d3.select(this.svg)
-            .attr("width", this.model.get('width'))
-            .attr("height", this.model.get('height'))
-
-        if (this.model.get("rescale_on_resize")) this.readjustZoomLevel(this.getInitialTransform(15))
     },
 
     getInitialTransform: function (radius) {
@@ -420,66 +481,6 @@ let WidgetView = widgets.DOMWidgetView.extend({
         this.model.set("zoom", transform.k)
         this.model.save_changes()
         this.isTransformCallbackAllowed = true
-    },
-
-    transformCallbackCheck: function () {
-        if (this.isTransformCallbackAllowed) {
-            this.readjustZoomLevel(
-                d3.zoomIdentity.translate(this.model.get('x_pos'), this.model.get('y_pos')).scale(this.model.get('zoom')))
-        }
-    },
-
-    handle_msg: function (msg) {
-        if (msg.code === 'clearGraph') {
-            this.clearGraph()
-        } else if (msg.code === 'initGraph') {
-            this.links = msg.links
-            this.nodes = msg.nodes
-            this.clusters = msg.clusters
-            this.rootClusterId = msg.rootClusterId
-            this.isClusterGraph = this.rootClusterId !== '-1'
-            this.isSPQRTree = msg.SPQRtree
-            if (this.isSPQRTree)
-                this.virtualLinks = msg.virtualLinks
-            this.render()
-            this.forceConfigChanged()
-        } else if (msg.code === 'nodeAdded') {
-            this.addNode(msg.data)
-        } else if (msg.code === 'linkAdded') {
-            this.addLink(msg.data)
-        } else if (msg.code === 'addClusterById') {
-            this.addCluster(msg.data)
-            console.log(this.clusters)
-        } else if (msg.code === 'deleteNodeById') {
-            this.deleteNodeById(msg.data)
-        } else if (msg.code === 'deleteLinkById') {
-            this.deleteLinkById(msg.data)
-        } else if (msg.code === 'deleteClusterById') {
-            this.deleteClusterById(msg.data)
-            console.log(this.clusters)
-        } else if (msg.code === 'updateNode') {
-            this.updateNode(msg.data, msg.animated)
-        } else if (msg.code === 'updateLink') {
-            this.updateLink(msg.data, msg.animated)
-        } else if (msg.code === 'moveLink') {
-            this.moveLinkBends(msg.data)
-        } else if (msg.code === 'removeAllBendMovers') {
-            this.removeAllBendMovers()
-        } else if (msg.code === 'removeBendMoversFor') {
-            this.removeBendMoversForLink(msg.data)
-        } else if (msg.code === 'moveCluster') {
-            this.moveCluster(msg.data)
-        } else if (msg.code === 'removeAllClusterMovers') {
-            this.removeAllClusterMovers()
-        } else if (msg.code === 'downloadSvg') {
-            this.downloadSvg(msg.fileName)
-        } else if (msg.code === 'exportSPQR') {
-            this.exportSPQRTree(msg.fileName)
-        } else if (msg.code === 'test') {
-            console.log("test")
-        } else {
-            console.log("msg cannot be read: " + msg)
-        }
     },
 
     downloadSvg: function (fileName) {
@@ -585,7 +586,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             cluster.nodesBoundingBox.maxY = cluster.nodesBoundingBox.maxY - (d.lastY - event.y)
 
             //update all cluster positions
-            widgetView.constructClusters(widgetView.rootClusterId, false)
+            c.constructClusters(widgetView.rootClusterId, widgetView, false)
 
             //drag nodes and links
             for (let i = 0; i < cluster.nodes.length; i++) {
@@ -694,7 +695,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 .attr("d", function (d) {
                     d.bends[bendIndex][0] = event.x
                     d.bends[bendIndex][1] = event.y
-                    return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
+                    return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target, d);
                 })
 
             if (bendIndex === 0) {
@@ -736,13 +737,13 @@ let WidgetView = widgets.DOMWidgetView.extend({
     addNode: function (node) {
         if (this.forceDirected) this.stopForceLayout()
         this.nodes[node.id] = node
-        this.constructNode(node, this.node_holder, this.text_holder, this, false)
+        c.constructNode(node, this.node_holder, this.text_holder, this, false)
 
         if (this.isClusterGraph) {
             const cluster = this.clusters[node.clusterId]
             cluster.nodes.push(node.id)
             this.recalculateClusterBoundingBox(cluster)
-            this.constructClusters(this.rootClusterId, false)
+            c.constructClusters(this.rootClusterId, this, false)
             this.updateClustersInOGDF()
         }
 
@@ -752,7 +753,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
     addLink: function (link) {
         if (this.forceDirected) this.stopForceLayout()
         this.links[link.id] = link
-        this.constructLink(link, this.line_holder, this.line_text_holder, this.line_click_holder, this, this.clickThickness, false)
+        c.constructLink(link, this.line_holder, this.line_text_holder, this.line_click_holder, this, this.clickThickness, false)
         this.forceConfigChanged()
     },
 
@@ -769,7 +770,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             this.nodes[nodeId].clusterId = cluster.id
         }
 
-        this.constructClusters(this.rootClusterId)
+        c.constructClusters(this.rootClusterId, this)
         this.updateClustersInOGDF()
     },
 
@@ -780,7 +781,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             const cluster = this.clusters[this.nodes[nodeId].clusterId]
             cluster.nodes.splice(cluster.nodes.indexOf(nodeId), 1)
             this.recalculateClusterBoundingBox(cluster)
-            this.constructClusters(this.rootClusterId, false)
+            c.constructClusters(this.rootClusterId, this, false)
             this.updateClustersInOGDF()
         }
 
@@ -875,7 +876,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             }).remove()
 
         //re-rendering clusters without calculating node bounding box
-        this.constructClusters(this.rootClusterId, false);
+        c.constructClusters(this.rootClusterId, this, false);
         this.updateClustersInOGDF()
     },
 
@@ -965,7 +966,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             const cluster = this.clusters[node.clusterId]
             //todo method that takes cluster and node to recalc
             this.recalculateClusterBoundingBox(cluster)
-            this.constructClusters(this.rootClusterId, false)
+            c.constructClusters(this.rootClusterId, this, false)
             this.updateClustersInOGDF()
         }
 
@@ -979,10 +980,16 @@ let WidgetView = widgets.DOMWidgetView.extend({
         nl.text(function (d) {
             if (d.name !== node.name) {
                 d.name = node.name
+                d.labelWidth = 0
             } else {
                 textChanged = false
             }
             return d.name;
+        }).style("font-size", function (d) {
+            if (textChanged)
+                return 1 + 'em'
+
+            return d.fontSize + 'em'
         })
 
         if (textChanged) {
@@ -1083,7 +1090,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 d.tx = newLink.tx
                 d.ty = newLink.ty
 
-                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
+                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target, d);
             })
             .attr("stroke", function (d) {
                 d.strokeColor = link.strokeColor
@@ -1105,7 +1112,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 d.tx = link.tx
                 d.ty = link.ty
 
-                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
+                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target, d);
             })
             .attr("stroke-width", function (d) {
                 d.strokeWidth = link.strokeWidth
@@ -1272,7 +1279,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                     labelsToMoveIds.push(d.id)
                 }
 
-                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
+                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target, d);
             })
 
         //move link-label
@@ -1299,19 +1306,19 @@ let WidgetView = widgets.DOMWidgetView.extend({
                     })
                     .attr("x1", function (d) {
                         let sourceLink = widgetView.links[d.sourceId]
-                        return (sourceLink.sx + sourceLink.tx) / 2
+                        return sourceLink.curveX === undefined ? (sourceLink.sx + sourceLink.tx) / 2 : sourceLink.curveX
                     })
                     .attr("y1", function (d) {
                         let sourceLink = widgetView.links[d.sourceId]
-                        return (sourceLink.sy + sourceLink.ty) / 2
+                        return sourceLink.curveY === undefined ? (sourceLink.sy + sourceLink.ty) / 2 : sourceLink.curveY
                     })
                     .attr("x2", function (d) {
                         let targetLink = widgetView.links[d.targetId]
-                        return (targetLink.sx + targetLink.tx) / 2
+                        return targetLink.curveX === undefined ? (targetLink.sx + targetLink.tx) / 2 : targetLink.curveX
                     })
                     .attr("y2", function (d) {
                         let targetLink = widgetView.links[d.targetId]
-                        return (targetLink.sy + targetLink.ty) / 2
+                        return targetLink.curveY === undefined ? (targetLink.sy + targetLink.ty) / 2 : targetLink.curveY
                     })
             }
         }
@@ -1351,241 +1358,6 @@ let WidgetView = widgets.DOMWidgetView.extend({
         }, 10)
     },
 
-    constructForceLink(linkData, line_holder, widgetView, basic) {
-        line_holder
-            .data([linkData])
-            .enter()
-            .append("path")
-            .attr("class", "line")
-            .attr("id", function (d) {
-                return d.id
-            })
-            .attr("marker-end", function (d) {
-                if (d.arrow && d.t_shape === 0 && d.target !== d.source) {
-                    return "url(#endSquare)";
-                } else if (d.arrow && d.t_shape !== 0 && d.target !== d.source) {
-                    return "url(#endCircle)";
-                } else {
-                    return null;
-                }
-            })
-            .attr("d", function (d) {
-                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
-            })
-            .attr("stroke", function (d) {
-                return widgetView.getColorStringFromJson(d.strokeColor)
-            })
-            .attr("stroke-width", function (d) {
-                return d.strokeWidth
-            })
-            .attr("fill", "none")
-            .on("click", function (event, d) {
-                if (basic) return
-                widgetView.send({
-                    "code": "linkClicked",
-                    "id": d.id,
-                    "altKey": event.altKey,
-                    "ctrlKey": event.ctrlKey
-                });
-            });
-    },
-
-    constructLink(linkData, line_holder, line_text_holder, line_click_holder, widgetView, clickThickness, basic) {
-        line_holder
-            .data([linkData])
-            .enter()
-            .append("path")
-            .attr("class", "line")
-            .attr("id", function (d) {
-                return d.id
-            })
-            .attr("marker-end", function (d) {
-                if (d.arrow && d.t_shape === 0 && d.source !== d.target) {
-                    return "url(#endSquare)";
-                } else if (d.arrow && d.t_shape !== 0 && d.source !== d.target) {
-                    return "url(#endCircle)";
-                } else {
-                    return null;
-                }
-            })
-            .attr("d", function (d) {
-                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
-            })
-            .attr("stroke", function (d) {
-                return widgetView.getColorStringFromJson(d.strokeColor)
-            })
-            .attr("stroke-width", function (d) {
-                return d.strokeWidth
-            })
-            .attr("fill", "none");
-
-        line_text_holder
-            .data([linkData])
-            .enter()
-            .append("text")
-            .attr("class", "linkLabel")
-            .attr("text-anchor", "middle")
-            .attr("dominant-baseline", "central")
-            .attr("fill", "black")
-            .attr("stroke-width", 1)
-            .attr("stroke", "white")
-            .attr("paint-order", "stroke")
-            .attr("id", function (d) {
-                return d.id
-            })
-            .text(function (d) {
-                return d.label;
-            })
-            .style("font-size", "0.5em")
-            .attr("transform", function (d) { //<-- use transform it's not a g
-                return "translate(" + d.label_x + "," + d.label_y + ")";
-            })
-
-        if (basic) return
-
-        line_click_holder
-            .data([linkData])
-            .enter()
-            .append("path")
-            .attr("class", "line")
-            .attr("id", function (d) {
-                return d.id
-            })
-            .attr("d", function (d) {
-                return widgetView.getPathForLine(d.sx, d.sy, d.bends, d.tx, d.ty, d.t_shape, d.source, d.target);
-            })
-            .attr("stroke", "transparent")
-            .attr("stroke-width", function (d) {
-                return Math.max(d.strokeWidth, clickThickness)
-            })
-            .attr("fill", "none")
-            .on("click", function (event, d) {
-                widgetView.send({"code": "linkClicked", "id": d.id, "altKey": event.altKey, "ctrlKey": event.ctrlKey});
-            })
-    },
-
-    constructVirtualLink(vLinkData, line_holder, widgetView) {
-        line_holder
-            .data([vLinkData])
-            .enter()
-            .append("line")
-            .style("stroke-dasharray", ("3, 3"))
-            .attr("x1", function (d) {
-                let sourceLink = widgetView.links[d.sourceId]
-                return (sourceLink.sx + sourceLink.tx) / 2
-            })
-            .attr("y1", function (d) {
-                let sourceLink = widgetView.links[d.sourceId]
-                return (sourceLink.sy + sourceLink.ty) / 2
-            })
-            .attr("x2", function (d) {
-                let targetLink = widgetView.links[d.targetId]
-                return (targetLink.sx + targetLink.tx) / 2
-            })
-            .attr("y2", function (d) {
-                let targetLink = widgetView.links[d.targetId]
-                return (targetLink.sy + targetLink.ty) / 2
-            })
-            .attr("stroke", "gray")
-            .attr("stroke-width", 1)
-            .attr("fill", "none")
-            .attr("class", "virtualLink");
-    },
-
-    constructNode(nodeData, node_holder, text_holder, widgetView, basic) {
-        let node = node_holder
-            .data([nodeData])
-            .enter()
-            .append(function (d) {
-                if (d.shape === 0) {
-                    return document.createElementNS("http://www.w3.org/2000/svg", "rect");
-                } else {
-                    return document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                }
-            })
-            .attr("class", "node")
-            .attr("width", function (d) {
-                return d.nodeWidth
-            })
-            .attr("height", function (d) {
-                return d.nodeHeight
-            })
-            .attr("x", function (d) {
-                return d.x - d.nodeWidth / 2
-            })
-            .attr("y", function (d) {
-                return d.y - d.nodeHeight / 2
-            })
-            .attr("cx", function (d) {
-                return d.x
-            })
-            .attr("cy", function (d) {
-                return d.y
-            })
-            .attr("id", function (d) {
-                return d.id
-            })
-            .attr("r", function (d) {
-                return d.nodeHeight / 2
-            })
-            .attr("fill", function (d) {
-                return widgetView.getColorStringFromJson(d.fillColor)
-            })
-            .attr("stroke", function (d) {
-                return widgetView.getColorStringFromJson(d.strokeColor)
-            })
-            .attr("stroke-width", function (d) {
-                return d.strokeWidth
-            })
-            .on("click", function (event, d) {
-                if (!basic && !widgetView.isNodeMovementEnabled) {
-                    widgetView.send({
-                        "code": "nodeClicked",
-                        "id": d.id,
-                        "altKey": event.altKey,
-                        "ctrlKey": event.ctrlKey
-                    });
-                }
-            })
-
-        let text = text_holder
-            .data([nodeData])
-            .enter()
-            .append("text")
-            .attr("class", "nodeLabel")
-            .attr("text-anchor", "middle")
-            .attr("dominant-baseline", "central")
-            .attr("fill", "black")
-            .attr("stroke-width", 1)
-            .attr("stroke", "white")
-            .attr("paint-order", "stroke")
-            .attr("id", function (d) {
-                return d.id
-            })
-            .text(function (d) {
-                return d.name;
-            })
-            .style("font-size", "1em")
-            .attr("transform", function (d) { //<-- use transform it's not a g
-                return "translate(" + d.x + "," + d.y + ")";
-            })
-            .on("click", function (event, d) {
-                if (!basic && !widgetView.isNodeMovementEnabled) {
-                    widgetView.send({
-                        "code": "nodeClicked",
-                        "id": d.id,
-                        "altKey": event.altKey,
-                        "ctrlKey": event.ctrlKey
-                    });
-                }
-            })
-
-        if (widgetView.isNodeMovementEnabled) {
-            node.call(widgetView.node_drag_handler)
-            text.call(widgetView.node_drag_handler)
-        }
-    },
-
     updateClustersInOGDF: function () {
         let clustersData = Object.values(this.clusters)
         for (let i = 0; i < clustersData.length; i++) {
@@ -1599,27 +1371,6 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 'height': c.y2 - c.y,
             });
         }
-    },
-
-    constructClusters: function (clusterId, calcNodeBoundingBox = true) {
-        let cluster = this.clusters[clusterId]
-        for (let i = 0; i < cluster.children.length; i++) {
-            this.constructClusters(cluster.children[i], calcNodeBoundingBox)
-        }
-
-        if (calcNodeBoundingBox) this.recalculateClusterBoundingBox(cluster)
-        this.calculateClusterSize(cluster)
-
-        let alreadyExists = !d3.select(this.svg)
-            .selectAll(".cluster")
-            .filter(function (d) {
-                return d.id === cluster.id;
-            }).empty()
-
-        if (alreadyExists)
-            this.updateCluster(cluster, false)
-        else
-            this.constructCluster(cluster, this.cluster_holder, this)
     },
 
     recalculateClusterBoundingBox: function (cluster) {
@@ -1692,7 +1443,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
         return "rgba(" + color.r + ", " + color.g + ", " + color.b + ", " + color.a + ")"
     },
 
-    getPath: function (x1, y1, x2, y2) {
+    getSelfLoopPath: function (x1, y1, x2, y2) {
         let xRotation = -45;
         let largeArc = 1;
         let drx = 30;
@@ -1739,7 +1490,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             .selectAll(".cluster")
 
         if (this.clusters != null && this.isClusterGraph)
-            this.constructClusters(this.rootClusterId)
+            c.constructClusters(this.rootClusterId, this)
 
         this.updateClustersInOGDF()
 
@@ -1757,8 +1508,8 @@ let WidgetView = widgets.DOMWidgetView.extend({
             .selectAll(".lineText")
 
         for (let i = 0; i < linksData.length; i++) {
-            if(widgetView.isSPQRTree && linksData[i].virtualLink) continue
-            widgetView.constructLink(linksData[i], this.line_holder, this.line_text_holder, this.line_click_holder, widgetView, this.clickThickness, false)
+            if (widgetView.isSPQRTree && linksData[i].virtualLink) continue
+            c.constructLink(linksData[i], this.line_holder, this.line_text_holder, this.line_click_holder, widgetView, this.clickThickness, false)
         }
 
         this.bendMover_holder = this.g.append("g").attr("class", "bendMover_holder").selectAll("bendMover")
@@ -1770,7 +1521,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             .selectAll(".virtualLink")
 
         for (let i = 0; i < this.virtualLinks.length; i++) {
-            this.constructVirtualLink(this.virtualLinks[i], this.virtual_line_holder, widgetView)
+            c.constructVirtualLink(this.virtualLinks[i], this.virtual_line_holder, widgetView)
         }
 
         //nodes
@@ -1788,7 +1539,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             .selectAll(".nodeLabel")
 
         for (let i = 0; i < nodesData.length; i++) {
-            widgetView.constructNode(nodesData[i], this.node_holder, this.text_holder, widgetView, false)
+            c.constructNode(nodesData[i], this.node_holder, this.text_holder, widgetView, false)
         }
 
         this.clusterMover_holder = this.g.append("g").attr("class", "clusterMover_holder").selectAll("clusterMover")
@@ -1967,35 +1718,47 @@ let WidgetView = widgets.DOMWidgetView.extend({
     },
 
     adaptLabelFontSize(d) {
-        let xPadding, diameter, labelAvailableWidth, labelWidth;
+        let labelAvailableWidth = d.nodeWidth - 2;
 
-        xPadding = 2;
-        diameter = d.nodeWidth;
-        labelAvailableWidth = diameter - xPadding;
-
-        labelWidth = this.getComputedTextLength();
+        if (typeof d.labelWidth === 'undefined' || d.labelWidth === 0)
+            d.labelWidth = this.getComputedTextLength();
 
         // There is enough space for the label so leave it as is.
-        if (labelWidth <= labelAvailableWidth) {
+        if (d.labelWidth <= labelAvailableWidth) {
+            d.fontSize = 1
             return '1em';
+        } else {
+            d.fontSize = (labelAvailableWidth / d.labelWidth - 0.01)
+            return d.fontSize + 'em';
         }
-
-        /*
-         * The meaning of the ratio between labelAvailableWidth and labelWidth equaling 1 is that
-         * the label is taking up exactly its available space.
-         * With the result as `1em` the font remains the same.
-         *
-         * The meaning of the ratio between labelAvailableWidth and labelWidth equaling 0.5 is that
-         * the label is taking up twice its available space.
-         * With the result as `0.5em` the font will change to half its original size.
-         */
-        return (labelAvailableWidth / labelWidth - 0.01) + 'em';
     },
 
-    getPathForLine(sx, sy, bends, tx, ty, shape, sId, tId) {
+    getPathForLine(sx, sy, bends, tx, ty, shape, sId, tId, link) {
         //self loop
         if (sId === tId && bends.length === 0) {
-            return this.getPath(sx, sy, tx, ty)
+            return this.getSelfLoopPath(sx, sy, tx, ty)
+        }
+
+        let M = 20
+
+        //spread out parallel edges of P-nodes
+        if (this.isSPQRTree && link.isPnode && link.isVlinkAttached) {
+            let linkToLookAt
+            for (let i = 0; i < this.virtualLinks.length; i++) {
+                if (this.virtualLinks[i].sourceId === link.id)
+                    linkToLookAt = this.links[this.virtualLinks[i].targetId]
+
+                if (this.virtualLinks[i].targetId === link.id)
+                    linkToLookAt = this.links[this.virtualLinks[i].sourceId]
+            }
+
+            let middleOfOtherX = (linkToLookAt.sx + linkToLookAt.tx) / 2
+            let myMiddleX = (sx + tx) / 2
+
+            if (middleOfOtherX < myMiddleX)
+                M = M * -1
+
+            return this.draw_curve(sx, sy, tx, ty, M, link)
         }
 
         const line = d3.line()
@@ -2022,6 +1785,34 @@ let WidgetView = widgets.DOMWidgetView.extend({
 
         points = points.concat([[tx, ty]])
         return line(points)
+    },
+
+    draw_curve(sx, sy, tx, ty, scale, link) {
+        //get point in the middle
+        let middleX = (tx + sx) / 2
+        let middleY = (ty + sy) / 2
+
+        //make sure that the orientation is correct.
+        let xDiff = tx - sx
+        let yDiff = ty - sy
+        let theta = Math.atan(yDiff / (xDiff + 0.1))
+        let aSign = (xDiff < 0 ? -1 : 1)
+
+        //find offsets
+        let offsetX = scale * aSign * Math.sin(theta)
+        let offsetY = scale * aSign * Math.cos(theta)
+
+        //calculate control point used for path
+        let controlPointX = middleX - offsetX
+        let controlPointY = middleY + offsetY
+
+        //save point where middle of path will actually be drawn
+        link.curveX = middleX - offsetX * 0.5
+        link.curveY = middleY + offsetY * 0.5
+
+        return "M" + sx + "," + sy +
+            "Q" + controlPointX + "," + controlPointY +
+            " " + tx + "," + ty
     },
 
     /**
