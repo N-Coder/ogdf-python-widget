@@ -5,6 +5,7 @@ from datetime import datetime
 import cppyy
 import ipywidgets as widgets
 from traitlets import Unicode, Dict, Integer, Float, Bool
+from ogdf_python import ogdf
 
 # See js/lib/ogdf-python-widget-view.js for the frontend counterpart to this file.
 from ogdf_python_widget.pythonize import color_to_dict
@@ -484,6 +485,19 @@ class Widget(widgets.DOMWidget):
         for link in self.graph_attributes.constGraph().edges:
             link_data = self.link_to_dict(link)
             links_data[link_data['id']] = link_data
+
+        cppyy.include("ogdf/basic/simple_graph_alg.h")
+        parallels = ogdf.EdgeArray[ogdf.SListPure['ogdf::edge']](self.graph_attributes.constGraph())
+        ogdf.getParallelFreeUndirected(self.graph_attributes.constGraph(), parallels)
+
+        for link in self.graph_attributes.constGraph().edges:
+            if parallels[link].empty():
+                continue
+            parallel_link_ids = [str(link.index())]
+            for link2 in parallels[link]:
+                parallel_link_ids.append(str(link2.index()))
+            for link_id in parallel_link_ids:
+                links_data[link_id]["parallel"] = parallel_link_ids
 
         cluster_data = {}
         root_cluster_id = '-1'
