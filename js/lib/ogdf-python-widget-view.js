@@ -754,6 +754,22 @@ let WidgetView = widgets.DOMWidgetView.extend({
         if (this.forceDirected) this.stopForceLayout()
         this.links[link.id] = link
         c.constructLink(link, this.line_holder, this.line_text_holder, this.line_click_holder, this, this.clickThickness, false)
+
+        let parallels = []
+        let linksData = Object.values(this.links)
+        for (let i = 0; i < linksData.length; i++) {
+            if ((link.source === linksData[i].source && link.target === linksData[i].target)
+                || (link.source === linksData[i].target && link.target === linksData[i].source))
+                parallels.push(linksData[i].id)
+        }
+
+        if (parallels.length > 1) {
+            for (let i = 0; i < parallels.length; i++) {
+                this.links[parallels[i]].parallel = [...parallels]
+                this.updateLink(this.links[parallels[i]], true)
+            }
+        }
+
         this.forceConfigChanged()
     },
 
@@ -804,6 +820,20 @@ let WidgetView = widgets.DOMWidgetView.extend({
 
     deleteLinkById: function (linkId) {
         if (this.forceDirected) this.stopForceLayout()
+
+        if ("parallel" in this.links[linkId]) {
+            let parallelLinks = this.links[linkId].parallel
+            const index = parallelLinks.indexOf(linkId)
+            for (let i = 0; i < parallelLinks.length; i++) {
+                if (parallelLinks[i] === linkId) continue
+                let l = this.links[parallelLinks[i]]
+                l.parallel.splice(index, 1)
+                delete l.curveX
+                delete l.curveY
+                this.updateLink(this.links[parallelLinks[i]], true)
+            }
+        }
+
         delete this.links[linkId]
 
         for (let i = this.virtualLinks.length - 1; i >= 0; i--) {
@@ -1125,9 +1155,12 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 d.label = link.label
                 return d.label;
             })
-            .attr("transform", function (d) { //<-- use transform it's not a g
-                d.label_x = link.label_x
-                d.label_y = link.label_y
+            .attr("transform", function (d) {
+                if ('curveX' in link && 'curveY' in link) {
+                    d.label_x = link.curveX
+                    d.label_y = link.curveY
+                }
+
                 return "translate(" + d.label_x + "," + d.label_y + ")";
             })
 
@@ -1292,6 +1325,15 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 .attr("transform", function (data) { //<-- use transform it's not a g
                     let labelX = (data.sx + data.tx) / 2
                     let labelY = (data.sy + data.ty) / 2
+
+                    if ('curveX' in data && 'curveY' in data) {
+                        labelX = data.curveX
+                        labelY = data.curveY
+                    }
+
+                    data.label_x = labelX
+                    data.label_y = labelY
+
                     return "translate(" + labelX + "," + labelY + ")";
                 });
         }
@@ -1739,7 +1781,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             return this.getSelfLoopPath(sx, sy, tx, ty)
         }
 
-        let M = 20
+        let M = 30
 
         //spread out parallel edges of P-nodes
         if (this.isSPQRTree && link.isPnode && link.isVlinkAttached) {
@@ -1761,6 +1803,48 @@ let WidgetView = widgets.DOMWidgetView.extend({
             return this.draw_curve(sx, sy, tx, ty, M, link)
         }
 
+        //parallel edges for normal graphs
+        if (link.parallel && bends.length === 0) {
+            let countMinus = 0
+            let countPlus = 0
+            let index
+            for (let i = 0; i < link.parallel.length; i++) {
+                let currentLink = this.links[link.parallel[i]]
+
+                if (currentLink.bends.length !== 0)
+                    continue
+
+                if (parseInt(this.nodes[currentLink.source].id) - parseInt(this.nodes[currentLink.target].id) > 0) {
+                    if (currentLink.id === link.id) index = countPlus
+                    countPlus++
+                } else {
+                    if (currentLink.id === link.id) index = countMinus
+                    countMinus++
+                }
+            }
+            if (countMinus + countPlus > 1) {
+                let node = this.nodes[link.target]
+
+                if (node.shape === 0) {
+                    let inter = this.pointOnRect(sx, sy,
+                        tx - node.nodeWidth / 2, ty - node.nodeHeight / 2,
+                        tx + node.nodeWidth / 2, ty + node.nodeHeight / 2, false);
+
+                    tx = inter.x
+                    ty = inter.y
+                }
+
+                let xDiff = tx - sx
+                let yDiff = ty - sy
+
+                if ((xDiff >= 0 && yDiff >= 0) || (xDiff <= 0 && yDiff <= 0)) {
+                    return this.draw_curve(sx, sy, tx, ty, M * (index + 1), link)
+                } else {
+                    return this.draw_curve(sx, sy, tx, ty, M * (index + 1), link)
+                }
+            }
+        }
+
         const line = d3.line()
         let points = [[sx, sy]].concat(bends)
 
@@ -1772,6 +1856,11 @@ let WidgetView = widgets.DOMWidgetView.extend({
             if (bends.length !== 0) {
                 sourceX = bends[bends.length - 1][0]
                 sourceY = bends[bends.length - 1][1]
+                link.label_x = bends[0][0]
+                link.label_y = bends[0][1]
+            } else {
+                link.label_x = (sx + tx) / 2
+                link.label_y = (sy + ty) / 2
             }
 
             let node = this.nodes[tId]
@@ -1809,6 +1898,9 @@ let WidgetView = widgets.DOMWidgetView.extend({
         //save point where middle of path will actually be drawn
         link.curveX = middleX - offsetX * 0.5
         link.curveY = middleY + offsetY * 0.5
+
+        link.label_x = link.curveX
+        link.label_y = link.curveY
 
         return "M" + sx + "," + sy +
             "Q" + controlPointX + "," + controlPointY +
