@@ -1,15 +1,21 @@
 let d3 = require("d3");
 
+export function getSVGType(shape) {
+    if (shape === "RoundedRect" || shape === "Rect") {
+        return document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    } else if (shape === "Ellipse") {
+        return document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    } else {
+        return document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    }
+}
+
 export function constructNode(nodeData, node_holder, text_holder, widgetView, basic) {
     let node = node_holder
         .data([nodeData])
         .enter()
         .append(function (d) {
-            if (d.shape === 0) {
-                return document.createElementNS("http://www.w3.org/2000/svg", "rect");
-            } else {
-                return document.createElementNS("http://www.w3.org/2000/svg", "circle");
-            }
+            return getSVGType(d.shape);
         })
         .attr("class", "node")
         .attr("width", function (d) {
@@ -29,6 +35,15 @@ export function constructNode(nodeData, node_holder, text_holder, widgetView, ba
         })
         .attr("cy", function (d) {
             return d.y
+        })
+        .attr('points', function (d) {
+            return getPath(d.shape, d.nodeWidth, d.nodeHeight, d.x, d.y)
+        })
+        .attr("rx", function (d) {
+            return d.shape === "RoundedRect" ? d.nodeWidth / 10 : null
+        })
+        .attr("ry", function (d) {
+            return d.shape === "RoundedRect" ? d.nodeHeight / 10 : null
         })
         .attr("id", function (d) {
             return d.id
@@ -104,12 +119,12 @@ export function constructLink(linkData, line_holder, line_text_holder, line_clic
             return d.id
         })
         .attr("marker-end", function (d) {
-            if (d.arrow && d.t_shape === 0 && d.source !== d.target) {
-                return "url(#endSquare)";
-            } else if (d.arrow && d.t_shape !== 0 && d.source !== d.target) {
+            if (d.arrow && d.t_shape === "Ellipse" && d.source !== d.target) {
                 return "url(#endCircle)";
+            } else if (d.source !== d.target) {
+                return "url(#endSquare)";
             } else {
-                return null;
+                return null
             }
         })
         .attr("d", function (d) {
@@ -199,12 +214,12 @@ export function constructForceLink(linkData, line_holder, widgetView, basic) {
             return d.id
         })
         .attr("marker-end", function (d) {
-            if (d.arrow && d.t_shape === 0 && d.target !== d.source) {
-                return "url(#endSquare)";
-            } else if (d.arrow && d.t_shape !== 0 && d.target !== d.source) {
+            if (d.arrow && d.t_shape === "Ellipse" && d.source !== d.target) {
                 return "url(#endCircle)";
+            } else if (d.source !== d.target) {
+                return "url(#endSquare)";
             } else {
-                return null;
+                return null
             }
         })
         .attr("d", function (d) {
@@ -254,4 +269,117 @@ export function constructVirtualLink(vLinkData, line_holder, widgetView) {
         .attr("stroke-width", 1)
         .attr("fill", "none")
         .attr("class", "virtualLink");
+}
+
+export function getPath(shape, nodeWidth, nodeHeight, x, y) {
+    let hexagonHalfHeight = 0.43301270189222 * nodeHeight;
+    let pentagonHalfWidth = 0.475528258147577 * nodeWidth;
+    let pentagonSmallHeight = 0.154508497187474 * nodeHeight;
+    let pentagonSmallWidth = 0.293892626146236 * nodeWidth;
+    let pentagonHalfHeight = 0.404508497187474 * nodeHeight;
+    let octagonHalfWidth = 0.461939766255643 * nodeWidth;
+    let octagonSmallWidth = 0.191341716182545 * nodeWidth;
+    let octagonHalfHeight = 0.461939766255643 * nodeHeight;
+    let octagonSmallHeight = 0.191341716182545 * nodeHeight;
+
+    let points = []
+    switch (shape) {
+        case "Triangle":
+            points = [
+                x, y - nodeHeight / 2,
+                x - nodeWidth / 2, y + nodeHeight / 2,
+                x + nodeWidth / 2, y + nodeHeight / 2
+            ]
+            break;
+        case "InvTriangle":
+            points = [x, y + nodeHeight / 2,
+                x - nodeWidth / 2, y - nodeHeight / 2,
+                x + nodeWidth / 2, y - nodeHeight / 2
+            ]
+            break;
+        case "Pentagon":
+            points = [
+                x, y - nodeHeight / 2,
+                x + pentagonHalfWidth, y - pentagonSmallHeight,
+                x + pentagonSmallWidth, y + pentagonHalfHeight,
+                x - pentagonSmallWidth, y + pentagonHalfHeight,
+                x - pentagonHalfWidth, y - pentagonSmallHeight
+            ]
+            break;
+        case "Hexagon":
+            points = [
+                x + nodeWidth / 4, y + hexagonHalfHeight,
+                x - nodeWidth / 4, y + hexagonHalfHeight,
+                x - nodeWidth / 2, y,
+                x - nodeWidth / 4, y - hexagonHalfHeight,
+                x + nodeWidth / 4, y - hexagonHalfHeight,
+                x + nodeWidth / 2, y
+            ]
+            break;
+        case "Octagon":
+            points = [
+                x + octagonHalfWidth, y + octagonSmallHeight,
+                x + octagonSmallWidth, y + octagonHalfHeight,
+                x - octagonSmallWidth, y + octagonHalfHeight,
+                x - octagonHalfWidth, y + octagonSmallHeight,
+                x - octagonHalfWidth, y - octagonSmallHeight,
+                x - octagonSmallWidth, y - octagonHalfHeight,
+                x + octagonSmallWidth, y - octagonHalfHeight,
+                x + octagonHalfWidth, y - octagonSmallHeight
+            ]
+            break;
+        case "Rhomb":
+            points = [
+                x + nodeWidth / 2, y,
+                x, y + nodeHeight / 2,
+                x - nodeWidth / 2, y,
+                x, y - nodeHeight / 2
+            ]
+            break;
+        case "Trapeze":
+            points = [
+                x - nodeWidth / 2, y + nodeHeight / 2,
+                x + nodeWidth / 2, y + nodeHeight / 2,
+                x + nodeWidth / 4, y - nodeHeight / 2,
+                x - nodeWidth / 4, y - nodeHeight / 2
+            ]
+            break;
+        case "InvTrapeze":
+            points = [
+                x - nodeWidth / 2, y - nodeHeight / 2,
+                x + nodeWidth / 2, y - nodeHeight / 2,
+                x + nodeWidth / 4, y + nodeHeight / 2,
+                x - nodeWidth / 4, y + nodeHeight / 2
+            ]
+            break;
+        case "Parallelogram":
+            points = [
+                x - nodeWidth / 2, y + nodeHeight / 2,
+                x + nodeWidth / 4, y + nodeHeight / 2,
+                x + nodeWidth / 2, y - nodeHeight / 2,
+                x - nodeWidth / 4, y - nodeHeight / 2
+            ]
+            break;
+        case "InvParallelogram":
+            points = [
+                x - nodeWidth / 2, y - nodeHeight / 2,
+                x + nodeWidth / 4, y - nodeHeight / 2,
+                x + nodeWidth / 2, y + nodeHeight / 2,
+                x - nodeWidth / 4, y + nodeHeight / 2
+            ]
+            break;
+    }
+
+    let polygonString = ""
+
+    for (let i = 0; i < points.length; i++) {
+        polygonString += points[i];
+        if (i % 2 === 0) {
+            polygonString += ","
+        } else if (i % 2 === 1) {
+            polygonString += " "
+        }
+    }
+
+    return polygonString
 }

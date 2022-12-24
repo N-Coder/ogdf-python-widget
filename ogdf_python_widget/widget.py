@@ -87,6 +87,9 @@ class Widget(widgets.DOMWidget):
     rescale_on_resize = Bool(True).tag(sync=True)
     node_movement_enabled = Bool(False).tag(sync=True)
 
+    supported_shapes = ["Triangle", "InvTriangle", "Pentagon", "Hexagon", "Octagon", "Rhomb", "Trapeze", "InvTrapeze",
+                        "Parallelogram", "InvParallelogram", "Rect", "Ellipse", "RoundedRect"]
+
     # callbacks
     on_node_click_callback = None
     on_link_click_callback = None
@@ -303,11 +306,12 @@ class Widget(widgets.DOMWidget):
         return {'x': g_x, 'y': g_y}
 
     def node_to_dict(self, node):
+        shape = ogdf.toString(ogdf.Shape(self.graph_attributes.shape(node))).decode("ASCII")
         node_data = {"id": str(node.index()),
                      "name": str(self.graph_attributes.label(node)),
                      "x": int(self.graph_attributes.x(node) + 0.5),
                      "y": int(self.graph_attributes.y(node) + 0.5),
-                     "shape": self.graph_attributes.shape(node),
+                     "shape": shape if shape in self.supported_shapes else "Rect",
                      "fillColor": color_to_dict(self.graph_attributes.fillColor(node)),
                      "strokeColor": color_to_dict(self.graph_attributes.strokeColor(node)),
                      "strokeWidth": self.graph_attributes.strokeWidth(node),
@@ -324,11 +328,13 @@ class Widget(widgets.DOMWidget):
         for i, point in enumerate(self.graph_attributes.bends(link)):
             bends.append([int(point.m_x + 0.5), int(point.m_y + 0.5)])
 
+        t_shape = ogdf.toString(ogdf.Shape(self.graph_attributes.shape(link.target()))).decode("ASCII")
+
         link_dict = {"id": str(link.index()),
                      "label": str(self.graph_attributes.label(link)),
                      "source": str(link.source().index()),
                      "target": str(link.target().index()),
-                     "t_shape": self.graph_attributes.shape(link.target()),
+                     "t_shape": t_shape if t_shape in self.supported_shapes else "Rect",
                      "strokeColor": color_to_dict(self.graph_attributes.strokeColor(link)),
                      "strokeWidth": self.graph_attributes.strokeWidth(link),
                      "sx": int(self.graph_attributes.x(link.source()) + 0.5),

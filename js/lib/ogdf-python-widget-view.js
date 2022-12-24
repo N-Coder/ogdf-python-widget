@@ -221,7 +221,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                     "name": "test",
                     "x": 0,
                     "y": 0,
-                    "shape": 0,
+                    "shape": "Rect",
                     "fillColor": {
                         "r": 0,
                         "g": 0,
@@ -246,7 +246,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                         "label": "",
                         "source": String(-parseInt(clusterData[i].id) - 1),
                         "target": clusterData[i].nodes[j],
-                        "t_shape": 0,
+                        "t_shape": "Rect",
                         "strokeColor": {
                             "r": 0,
                             "g": 0,
@@ -340,6 +340,9 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 })
                 .attr("y", function (d) {
                     return d.y - d.nodeHeight / 2;
+                })
+                .attr("points", function (d) {
+                    return c.getPath(d.shape, d.nodeWidth, d.nodeHeight, d.x, d.y);
                 })
                 .attr("cx", function (d) {
                     return d.x;
@@ -910,6 +913,16 @@ let WidgetView = widgets.DOMWidgetView.extend({
         this.updateClustersInOGDF()
     },
 
+    getShapeCategory: function (shape) {
+        if (shape === "Rect" || shape === "RoundedRect") {
+            return "Rect"
+        } else if (shape === "Ellipse") {
+            return "Ellipse"
+        } else {
+            return "Polygon"
+        }
+    },
+
     updateNode: function (node, animated) {
         let widgetView = this
 
@@ -926,6 +939,19 @@ let WidgetView = widgets.DOMWidgetView.extend({
             })
 
         if (widgetView.forceDirected) widgetView.simulation.alphaTarget(0.3).restart()
+
+        let oldShape = widgetView.nodes[node.id].shape
+        let newShape = node.shape
+
+        if (this.getShapeCategory(oldShape) !== this.getShapeCategory(newShape)) {
+            //transition between shape categories is not possible since they are different SVG-elements -> new node
+            this.deleteNodeById(node.id)
+            this.addNode(node)
+            setTimeout(function () {
+                widgetView.rescaleTextById(node.id)
+            }, 10)
+            return
+        }
 
         n.transition()
             .duration(animated ? this.animationDuration : 1)
@@ -954,6 +980,16 @@ let WidgetView = widgets.DOMWidgetView.extend({
 
                 d.y = node.y
                 return d.y - d.nodeHeight / 2
+            })
+            .attr('points', function (d) {
+                d.shape = node.shape
+                return c.getPath(d.shape, d.nodeWidth, d.nodeHeight, d.x, d.y)
+            })
+            .attr("rx", function (d) {
+                return d.shape === "RoundedRect" ? d.nodeWidth / 10 : null
+            })
+            .attr("ry", function (d) {
+                return d.shape === "RoundedRect" ? d.nodeHeight / 10 : null
             })
             .attr("cx", function (d) {
                 if (widgetView.forceDirected && !widgetView.isNodeMovementEnabled)
@@ -1276,7 +1312,10 @@ let WidgetView = widgets.DOMWidgetView.extend({
                 return newY
             })
             .attr("x", newX - d.nodeWidth / 2)
-            .attr("y", newY - d.nodeHeight / 2);
+            .attr("y", newY - d.nodeHeight / 2)
+            .attr('points', function (d) {
+                return c.getPath(d.shape, d.nodeWidth, d.nodeHeight, newX, newY)
+            });
 
         //move node-label
         d3.select(widgetView.svg)
@@ -1425,7 +1464,6 @@ let WidgetView = widgets.DOMWidgetView.extend({
     },
 
     calculateClusterSize: function (cluster) {
-        //todo create bounding box for each node in preparation for shapes
         //nodeOffset in this case will be nodeWidth/Height
         let nodeOffset = 10
         let clusterOffset = 5
@@ -1557,7 +1595,6 @@ let WidgetView = widgets.DOMWidgetView.extend({
         this.bendMover_holder = this.g.append("g").attr("class", "bendMover_holder").selectAll("bendMover")
 
         //SPQR
-
         this.virtual_line_holder = this.g.append("g")
             .attr("class", "virtual_line_holder")
             .selectAll(".virtualLink")
@@ -1760,7 +1797,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
     },
 
     adaptLabelFontSize(d) {
-        let labelAvailableWidth = d.nodeWidth - 2;
+        let labelAvailableWidth = d.nodeWidth - 5;
 
         if (typeof d.labelWidth === 'undefined' || d.labelWidth === 0)
             d.labelWidth = this.getComputedTextLength();
@@ -1825,7 +1862,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             if (countMinus + countPlus > 1) {
                 let node = this.nodes[link.target]
 
-                if (node.shape === 0) {
+                if (node.shape !== "Ellipse") {
                     let inter = this.pointOnRect(sx, sy,
                         tx - node.nodeWidth / 2, ty - node.nodeHeight / 2,
                         tx + node.nodeWidth / 2, ty + node.nodeHeight / 2, false);
@@ -1849,7 +1886,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
         let points = [[sx, sy]].concat(bends)
 
         //shape is a rectangle
-        if (shape === 0) {
+        if (shape !== "Ellipse") {
             let sourceX = sx
             let sourceY = sy
 
