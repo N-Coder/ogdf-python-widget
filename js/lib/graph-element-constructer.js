@@ -37,7 +37,7 @@ export function constructNode(nodeData, node_holder, text_holder, widgetView, ba
             return d.y
         })
         .attr('points', function (d) {
-            return getPath(d.shape, d.nodeWidth, d.nodeHeight, d.x, d.y)
+            return getShapePath(d.shape, d.nodeWidth, d.nodeHeight, d.x, d.y)
         })
         .attr("rx", function (d) {
             return d.shape === "RoundedRect" ? d.nodeWidth / 10 : null
@@ -59,6 +59,9 @@ export function constructNode(nodeData, node_holder, text_holder, widgetView, ba
         })
         .attr("stroke-width", function (d) {
             return d.strokeWidth
+        })
+        .attr("stroke-dasharray", function (d) {
+            return getLineDash(d.strokeWidth, d.strokeType)
         })
         .on("click", function (event, d) {
             if (!basic && !widgetView.isNodeMovementEnabled) {
@@ -135,6 +138,9 @@ export function constructLink(linkData, line_holder, line_text_holder, line_clic
         })
         .attr("stroke-width", function (d) {
             return d.strokeWidth
+        })
+        .attr("stroke-dasharray", function (d) {
+            return getLineDash(d.strokeWidth, d.strokeType)
         })
         .attr("fill", "none");
 
@@ -231,6 +237,9 @@ export function constructForceLink(linkData, line_holder, widgetView, basic) {
         .attr("stroke-width", function (d) {
             return d.strokeWidth
         })
+        .attr("stroke-dasharray", function (d) {
+            return getLineDash(d.strokeWidth, d.strokeType)
+        })
         .attr("fill", "none")
         .on("click", function (event, d) {
             if (basic) return
@@ -271,7 +280,7 @@ export function constructVirtualLink(vLinkData, line_holder, widgetView) {
         .attr("class", "virtualLink");
 }
 
-export function getPath(shape, nodeWidth, nodeHeight, x, y) {
+export function getShapePath(shape, nodeWidth, nodeHeight, x, y) {
     let hexagonHalfHeight = 0.43301270189222 * nodeHeight;
     let pentagonHalfWidth = 0.475528258147577 * nodeWidth;
     let pentagonSmallHeight = 0.154508497187474 * nodeHeight;
@@ -382,4 +391,19 @@ export function getPath(shape, nodeWidth, nodeHeight, x, y) {
     }
 
     return polygonString
+}
+
+export function getLineDash(strokeWidth, strokeType) {
+    switch (strokeType) {
+        case "Solid":
+            return null;
+        case "Dash":
+            return 4 * strokeWidth + "," + 2 * strokeWidth;
+        case "Dot":
+            return 1 * strokeWidth + "," + 2 * strokeWidth;
+        case "Dashdot":
+            return 4 * strokeWidth + "," + 2 * strokeWidth + "," + 1 * strokeWidth + "," + 2 * strokeWidth;
+        case "Dashdotdot":
+            return 4 * strokeWidth + "," + 2 * strokeWidth + "," + 1 * strokeWidth + "," + 2 * strokeWidth + "," + 1 * strokeWidth + "," + 2 * strokeWidth;
+    }
 }

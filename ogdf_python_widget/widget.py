@@ -90,6 +90,10 @@ class Widget(widgets.DOMWidget):
     supported_shapes = ["Triangle", "InvTriangle", "Pentagon", "Hexagon", "Octagon", "Rhomb", "Trapeze", "InvTrapeze",
                         "Parallelogram", "InvParallelogram", "Rect", "Ellipse", "RoundedRect"]
 
+    supported_stroke_types = ['Solid', 'Dash', 'Dot', 'Dashdot', 'Dashdotdot']
+
+    temporary_stroke_type_map = {0: 'None', 1: 'Solid', 2: 'Dash', 3: 'Dot', 4: 'Dashdot', 5: 'Dashdotdot'}
+
     # callbacks
     on_node_click_callback = None
     on_link_click_callback = None
@@ -307,6 +311,9 @@ class Widget(widgets.DOMWidget):
 
     def node_to_dict(self, node):
         shape = ogdf.toString(ogdf.Shape(self.graph_attributes.shape(node))).decode("ASCII")
+
+        stroke_type = self.temporary_stroke_type_map[ord(self.graph_attributes.strokeType(node))]
+
         node_data = {"id": str(node.index()),
                      "name": str(self.graph_attributes.label(node)),
                      "x": int(self.graph_attributes.x(node) + 0.5),
@@ -315,6 +322,7 @@ class Widget(widgets.DOMWidget):
                      "fillColor": color_to_dict(self.graph_attributes.fillColor(node)),
                      "strokeColor": color_to_dict(self.graph_attributes.strokeColor(node)),
                      "strokeWidth": self.graph_attributes.strokeWidth(node),
+                     "strokeType": stroke_type if stroke_type in self.supported_stroke_types else "Solid",
                      "nodeWidth": self.graph_attributes.width(node),
                      "nodeHeight": self.graph_attributes.height(node)}
 
@@ -330,6 +338,8 @@ class Widget(widgets.DOMWidget):
 
         t_shape = ogdf.toString(ogdf.Shape(self.graph_attributes.shape(link.target()))).decode("ASCII")
 
+        stroke_type = self.temporary_stroke_type_map[ord(self.graph_attributes.strokeType(link))]
+
         link_dict = {"id": str(link.index()),
                      "label": str(self.graph_attributes.label(link)),
                      "source": str(link.source().index()),
@@ -337,6 +347,7 @@ class Widget(widgets.DOMWidget):
                      "t_shape": t_shape if t_shape in self.supported_shapes else "Rect",
                      "strokeColor": color_to_dict(self.graph_attributes.strokeColor(link)),
                      "strokeWidth": self.graph_attributes.strokeWidth(link),
+                     "strokeType": stroke_type if stroke_type in self.supported_stroke_types else "Solid",
                      "sx": int(self.graph_attributes.x(link.source()) + 0.5),
                      "sy": int(self.graph_attributes.y(link.source()) + 0.5),
                      "tx": int(self.graph_attributes.x(link.target()) + 0.5),

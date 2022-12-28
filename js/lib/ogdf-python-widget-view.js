@@ -342,7 +342,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
                     return d.y - d.nodeHeight / 2;
                 })
                 .attr("points", function (d) {
-                    return c.getPath(d.shape, d.nodeWidth, d.nodeHeight, d.x, d.y);
+                    return c.getShapePath(d.shape, d.nodeWidth, d.nodeHeight, d.x, d.y);
                 })
                 .attr("cx", function (d) {
                     return d.x;
@@ -983,7 +983,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             })
             .attr('points', function (d) {
                 d.shape = node.shape
-                return c.getPath(d.shape, d.nodeWidth, d.nodeHeight, d.x, d.y)
+                return c.getShapePath(d.shape, d.nodeWidth, d.nodeHeight, d.x, d.y)
             })
             .attr("rx", function (d) {
                 return d.shape === "RoundedRect" ? d.nodeWidth / 10 : null
@@ -1024,6 +1024,10 @@ let WidgetView = widgets.DOMWidgetView.extend({
             .attr("stroke-width", function (d) {
                 d.strokeWidth = node.strokeWidth
                 return d.strokeWidth
+            })
+            .attr("stroke-dasharray", function (d) {
+                d.strokeType = node.strokeType
+                return c.getLineDash(d.strokeWidth, d.strokeType)
             })
 
         if (this.isClusterGraph) {
@@ -1165,6 +1169,10 @@ let WidgetView = widgets.DOMWidgetView.extend({
             .attr("stroke-width", function (d) {
                 d.strokeWidth = link.strokeWidth
                 return d.strokeWidth
+            })
+            .attr("stroke-dasharray", function (d) {
+                d.strokeType = link.strokeType
+                return c.getLineDash(d.strokeWidth, d.strokeType)
             })
 
         lc.transition()
@@ -1314,7 +1322,7 @@ let WidgetView = widgets.DOMWidgetView.extend({
             .attr("x", newX - d.nodeWidth / 2)
             .attr("y", newY - d.nodeHeight / 2)
             .attr('points', function (d) {
-                return c.getPath(d.shape, d.nodeWidth, d.nodeHeight, newX, newY)
+                return c.getShapePath(d.shape, d.nodeWidth, d.nodeHeight, newX, newY)
             });
 
         //move node-label
