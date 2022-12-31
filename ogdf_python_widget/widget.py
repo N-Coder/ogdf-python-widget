@@ -92,8 +92,6 @@ class Widget(widgets.DOMWidget):
 
     supported_stroke_types = ['Solid', 'Dash', 'Dot', 'Dashdot', 'Dashdotdot']
 
-    temporary_stroke_type_map = {0: 'None', 1: 'Solid', 2: 'Dash', 3: 'Dot', 4: 'Dashdot', 5: 'Dashdotdot'}
-
     # callbacks
     on_node_click_callback = None
     on_link_click_callback = None
@@ -311,8 +309,7 @@ class Widget(widgets.DOMWidget):
 
     def node_to_dict(self, node):
         shape = ogdf.toString(ogdf.Shape(self.graph_attributes.shape(node))).decode("ASCII")
-
-        stroke_type = self.temporary_stroke_type_map[ord(self.graph_attributes.strokeType(node))]
+        stroke_type = ogdf.toString[ogdf.StrokeType](self.graph_attributes.strokeType(node)).decode("ASCII")
 
         node_data = {"id": str(node.index()),
                      "name": str(self.graph_attributes.label(node)),
@@ -337,8 +334,7 @@ class Widget(widgets.DOMWidget):
             bends.append([int(point.m_x + 0.5), int(point.m_y + 0.5)])
 
         t_shape = ogdf.toString(ogdf.Shape(self.graph_attributes.shape(link.target()))).decode("ASCII")
-
-        stroke_type = self.temporary_stroke_type_map[ord(self.graph_attributes.strokeType(link))]
+        stroke_type = ogdf.toString[ogdf.StrokeType](self.graph_attributes.strokeType(link)).decode("ASCII")
 
         link_dict = {"id": str(link.index()),
                      "label": str(self.graph_attributes.label(link)),
