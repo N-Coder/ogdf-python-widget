@@ -310,6 +310,7 @@ class Widget(widgets.DOMWidget):
     def node_to_dict(self, node):
         shape = ogdf.toString(ogdf.Shape(self.graph_attributes.shape(node))).decode("ASCII")
         stroke_type = ogdf.toString[ogdf.StrokeType](self.graph_attributes.strokeType(node)).decode("ASCII")
+        fill_pattern = ogdf.toString[ogdf.FillPattern](self.graph_attributes.fillPattern(node)).decode("ASCII")
 
         node_data = {"id": str(node.index()),
                      "name": str(self.graph_attributes.label(node)),
@@ -317,9 +318,11 @@ class Widget(widgets.DOMWidget):
                      "y": int(self.graph_attributes.y(node) + 0.5),
                      "shape": shape if shape in self.supported_shapes else "Rect",
                      "fillColor": color_to_dict(self.graph_attributes.fillColor(node)),
+                     "bgColor": color_to_dict(self.graph_attributes.fillBgColor(node)),
                      "strokeColor": color_to_dict(self.graph_attributes.strokeColor(node)),
                      "strokeWidth": self.graph_attributes.strokeWidth(node),
                      "strokeType": stroke_type if stroke_type in self.supported_stroke_types else "Solid",
+                     "fillPattern": fill_pattern,
                      "nodeWidth": self.graph_attributes.width(node),
                      "nodeHeight": self.graph_attributes.height(node)}
 

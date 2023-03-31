@@ -1015,7 +1015,22 @@ let WidgetView = widgets.DOMWidgetView.extend({
             })
             .attr("fill", function (d) {
                 d.fillColor = node.fillColor
-                return widgetView.getColorStringFromJson(d.fillColor)
+                d.bgColor = node.bgColor
+                d.fillPattern = node.fillPattern
+
+                if (d.fillPattern === "Solid")
+                    return widgetView.getColorStringFromJson(d.fillColor)
+
+                if (d.fillPattern === "None")
+                    return "transparent"
+
+                let patternName = c.getPatternName(node)
+
+                if (!c.doesPatternExist(patternName, widgetView)) {
+                    c.createPattern(node, patternName, widgetView)
+                }
+
+                return "url(#" + patternName + ")"
             })
             .attr("stroke", function (d) {
                 d.strokeColor = node.strokeColor

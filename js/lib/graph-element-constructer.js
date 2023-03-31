@@ -10,6 +10,186 @@ export function getSVGType(shape) {
     }
 }
 
+export function doesPatternExist(name, widgetView) {
+    let t = d3.select(widgetView.svg)
+        .selectAll("#" + name)
+    return !t.empty()
+}
+
+export function getPatternName(node) {
+    return "x" + node.fillPattern + "x" + node.nodeWidth + "x" + node.nodeHeight + "x"
+        + node.fillColor.r + "x" + node.fillColor.g + "x" + node.fillColor.b + "x" + node.fillColor.a + "x"
+        + node.bgColor.r + "x" + node.bgColor.g + "x" + node.bgColor.b + "x" + node.bgColor.a + "x"
+}
+
+export function createPattern(nodeData, patternName, widgetView) {
+    let fillColor = widgetView.getColorStringFromJson(nodeData.fillColor)
+    let bGColor = widgetView.getColorStringFromJson(nodeData.bgColor)
+    let svg = d3.select(widgetView.svg)
+
+    if (nodeData.fillPattern === "Horizontal" || nodeData.fillPattern.startsWith("Dense")) {
+        let amount;
+
+        if (nodeData.fillPattern === "Horizontal") amount = 1
+        if (nodeData.fillPattern.startsWith("Dense")) {
+            let matches = nodeData.fillPattern.match(/\d+$/)
+            if (matches)
+                amount = parseInt(matches[0]) + 1
+        }
+
+        constructHorizontalPattern(amount, nodeData.nodeHeight, nodeData.nodeWidth, fillColor, bGColor, patternName, svg)
+    } else if (nodeData.fillPattern === "Vertical") {
+        constructVerticalPattern(4, nodeData.nodeHeight, nodeData.nodeWidth, fillColor, bGColor, patternName, svg)
+    } else if (nodeData.fillPattern === "Cross") {
+        constructCrossPattern(nodeData.nodeHeight, nodeData.nodeWidth, fillColor, bGColor, patternName, svg)
+    } else if (nodeData.fillPattern.endsWith("Diagonal")) {
+        constructDiagonalPattern(nodeData.fillPattern.startsWith("Backward"), nodeData.nodeHeight, nodeData.nodeWidth, fillColor, bGColor, patternName, svg)
+    } else if (nodeData.fillPattern === "DiagonalCross") {
+        constructDiagonalCrossPattern(nodeData.nodeHeight, nodeData.nodeWidth, fillColor, bGColor, patternName, svg)
+    }
+}
+
+function getBlankPatterns(svg, name) {
+    return svg.append("svg:defs").selectAll("pattern")
+        .data([name])
+        .enter()
+        .append("svg:pattern")
+        .attr("id", name)
+        .attr("width", 1)
+        .attr("height", 1)
+        .attr("patternUnits", "objectBoundingBox")
+}
+
+function constructHorizontalPattern(amount, nodeHeight, nodeWidth, fillColor, bGColor, name, svg) {
+    let height = nodeHeight / amount / 2
+    let pattern = getBlankPatterns(svg, name)
+
+    pattern.append("svg:rect")
+        .attr("x", "0")
+        .attr("y", "0")
+        .attr("width", nodeWidth)
+        .attr("height", nodeHeight)
+        .attr("fill", bGColor)
+        .style("stroke", "none")
+
+    for (let i = 0; i < amount; i++) {
+        pattern.append("svg:rect")
+            .attr("x", "0")
+            .attr("y", "" + (height * 2 * i))
+            .attr("width", nodeWidth)
+            .attr("height", "" + height)
+            .attr("fill", fillColor)
+            .style("stroke", "none")
+    }
+}
+
+function constructVerticalPattern(amount, nodeHeight, nodeWidth, fillColor, bGColor, name, svg) {
+    let width = nodeWidth / amount / 2
+    let pattern = getBlankPatterns(svg, name)
+
+    pattern.append("svg:rect")
+        .attr("x", "0")
+        .attr("y", "0")
+        .attr("width", nodeWidth)
+        .attr("height", nodeHeight)
+        .attr("fill", bGColor)
+        .style("stroke", "none")
+
+    for (let i = 0; i < amount; i++) {
+        pattern.append("svg:rect")
+            .attr("x", "" + (width * 2 * i))
+            .attr("y", "0")
+            .attr("width", "" + width)
+            .attr("height", nodeHeight)
+            .attr("fill", fillColor)
+            .style("stroke", "none")
+    }
+}
+
+function constructCrossPattern(nodeHeight, nodeWidth, fillColor, bGColor, name, svg) {
+    let pattern = getBlankPatterns(svg, name)
+
+    pattern.append("svg:rect")
+        .attr("x", "0")
+        .attr("y", "0")
+        .attr("width", nodeWidth)
+        .attr("height", nodeHeight)
+        .attr("fill", bGColor)
+        .style("stroke", "none")
+
+    pattern.append("svg:rect")
+        .attr("x", "0")
+        .attr("y", "" + (nodeHeight / 5 * 2))
+        .attr("width", nodeWidth)
+        .attr("height", nodeHeight / 5)
+        .attr("fill", fillColor)
+        .style("stroke", "none")
+
+    pattern.append("svg:rect")
+        .attr("x", "" + (nodeWidth / 5 * 2))
+        .attr("y", "0")
+        .attr("width", nodeWidth / 5)
+        .attr("height", nodeHeight)
+        .attr("fill", fillColor)
+        .style("stroke", "none")
+}
+
+function constructDiagonalCrossPattern(nodeHeight, nodeWidth, fillColor, bGColor, name, svg) {
+    let pattern = getBlankPatterns(svg, name)
+
+    pattern.append("svg:rect")
+        .attr("x", "0")
+        .attr("y", "0")
+        .attr("width", nodeWidth)
+        .attr("height", nodeHeight)
+        .attr("fill", bGColor)
+        .style("stroke", "none")
+
+    pattern.append("svg:rect")
+        .attr("x", -nodeWidth)
+        .attr("y", "" + (nodeHeight / 5 * 2))
+        .attr("width", nodeWidth * 3)
+        .attr("height", nodeHeight / 5)
+        .attr("fill", fillColor)
+        .attr("transform", "rotate(45," + nodeWidth / 2 + "," + nodeHeight / 2 + ")")
+        .style("stroke", "none")
+
+    pattern.append("svg:rect")
+        .attr("x", -nodeWidth)
+        .attr("y", "" + (nodeHeight / 5 * 2))
+        .attr("width", nodeWidth * 3)
+        .attr("height", nodeHeight / 5)
+        .attr("fill", fillColor)
+        .attr("transform", "rotate(-45," + nodeWidth / 2 + "," + nodeHeight / 2 + ")")
+        .style("stroke", "none")
+}
+
+function constructDiagonalPattern(isBackwards, nodeHeight, nodeWidth, fillColor, bGColor, name, svg) {
+    let width = nodeWidth / 4 / 2
+    let pattern = getBlankPatterns(svg, name)
+    let angle = 20
+    if (isBackwards) angle *= -1
+
+    pattern.append("svg:rect")
+        .attr("x", "0")
+        .attr("y", "0")
+        .attr("width", nodeWidth)
+        .attr("height", nodeHeight)
+        .attr("fill", bGColor)
+        .style("stroke", "none")
+
+    for (let i = -1; i <= 4; i++) {
+        pattern.append("svg:rect")
+            .attr("x", "" + (width * 2 * i + width))
+            .attr("y", "" + -width)
+            .attr("width", "" + width)
+            .attr("height", nodeHeight + 2 * width)
+            .attr("fill", fillColor)
+            .attr("transform", "rotate(" + angle + "," + (((width * 2 * i + width) + width / 2)) + "," + (nodeHeight / 2) + ")")
+            .style("stroke", "none")
+    }
+}
+
 export function constructNode(nodeData, node_holder, text_holder, widgetView, basic) {
     let node = node_holder
         .data([nodeData])
@@ -52,7 +232,20 @@ export function constructNode(nodeData, node_holder, text_holder, widgetView, ba
             return d.nodeHeight / 2
         })
         .attr("fill", function (d) {
-            return widgetView.getColorStringFromJson(d.fillColor)
+            if (d.fillPattern === "Solid")
+                return widgetView.getColorStringFromJson(d.fillColor)
+
+            if (d.fillPattern === "None")
+                //todo test
+                return "transparent"
+
+            let patternName = getPatternName(nodeData)
+
+            if (!doesPatternExist(patternName, widgetView)) {
+                createPattern(nodeData, patternName, widgetView)
+            }
+
+            return "url(#" + patternName + ")"
         })
         .attr("stroke", function (d) {
             return widgetView.getColorStringFromJson(d.strokeColor)
