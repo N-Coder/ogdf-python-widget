@@ -1925,6 +1925,10 @@ let WidgetView = widgets.DOMWidgetView.extend({
 
             let node = this.nodes[tId]
 
+            //only relevant for SPQR-Trees. If force layout is activated twice d3 will have changed the data structure.
+            if(node === undefined)
+                node = tId
+
             let inter = this.pointOnRect(sourceX, sourceY,
                 tx - node.nodeWidth / 2, ty - node.nodeHeight / 2,
                 tx + node.nodeWidth / 2, ty + node.nodeHeight / 2, false);

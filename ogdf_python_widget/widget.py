@@ -17,7 +17,7 @@ def get_link_stabilizer(source_id, target_id):
                            "label": "",
                            "source": source_id,
                            "target": target_id,
-                           "t_shape": 2,
+                           "t_shape": "Ellipse",
                            'strokeColor': {
                                'r': 100,
                                'g': 0,
@@ -407,10 +407,11 @@ class Widget(widgets.DOMWidget):
             for node in skeleton.getGraph().nodes:
                 node_id = "G" + str(graph.index()) + "N" + str(node.index())
                 nodes_data[node_id] = {"id": node_id,
+                                       "fillPattern": "Solid",
                                        "name": node_id,
                                        "x": 0,
                                        "y": 0,
-                                       "shape": 2,
+                                       "shape": "Ellipse",
                                        "fillColor": fill_color,
                                        'strokeColor': {
                                            'r': 0,
@@ -427,7 +428,7 @@ class Widget(widgets.DOMWidget):
                              "label": "",
                              "source": "G" + str(graph.index()) + "N" + str(link.source().index()),
                              "target": "G" + str(graph.index()) + "N" + str(link.target().index()),
-                             "t_shape": 2,
+                             "t_shape": "Ellipse",
                              'strokeColor': {
                                  'r': 0,
                                  'g': 0,
