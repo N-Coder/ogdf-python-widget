@@ -27,9 +27,17 @@ dependencies = [
 ]
 dynamic = ["version"]
 
+[project.optional-dependencies]
+test = [
+  "selenium", "webdriver_manager", "attrs", "sh"
+]
+
 [tool.hatch.version]
 source = "code"
 path = "ogdf_python_widget/_version.py"
+
+[tool.hatch.envs.test]
+features = ["test"]
 
 [tool.hatch.build.targets.wheel.shared-data]
 "install/nbextension" = "share/jupyter/nbextensions/ogdf-python-widget"
